@@ -1,0 +1,38 @@
+{
+  "_comment": "HELM DATA FILE. Copy this to helm-dashboard/public/data.json and replace each `series` with real daily data from your POS portals to go live. Only `series` must be scraped — other fields are preset (edit capitalDeployed/netMargin to your real numbers anytime). Any business you include overrides the sample one by `id`; the portfolio stays sample until you connect a brokerage.",
+  "businesses": [
+    {
+      "id": "subway-espanola",
+      "name": "Subway",
+      "shortName": "Subway",
+      "type": "restaurant",
+      "location": "Española, ON",
+      "currency": "CAD",
+      "category": "Sandwich franchise",
+      "accent": "#2bb673",
+      "capitalDeployed": 250000,
+      "netMargin": 0.085,
+      "series": [
+        { "date": "2026-05-30", "revenue": 2180, "transactions": 168 },
+        { "date": "2026-05-31", "revenue": 1490, "transactions": 121 },
+        { "date": "2026-06-01", "revenue": 1875, "transactions": 146 }
+      ]
+    },
+    {
+      "id": "riverside-columbus",
+      "name": "Riverside Smoke Shop",
+      "shortName": "Riverside",
+      "type": "retail",
+      "location": "Columbus, OH",
+      "category": "Tobacco & vape",
+      "accent": "#e0913a",
+      "capitalDeployed": 185000,
+      "netMargin": 0.135,
+      "series": [
+        { "date": "2026-05-30", "revenue": 1720, "transactions": 104 },
+        { "date": "2026-05-31", "revenue": 1280, "transactions": 88 },
+        { "date": "2026-06-01", "revenue": 1015, "transactions": 71 }
+      ]
+    }
+  ]
+}
