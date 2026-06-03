@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, Sparkles, ArrowUp, ChevronRight } from "lucide-react";
-import { answerQuestion, SUGGESTED_QUESTIONS, type AskContext, type AskAnswer } from "../lib/ask";
+import { SUGGESTED_QUESTIONS, type AskContext, type AskAnswer } from "../lib/ask";
+import { askAgent, type AgentSource } from "../lib/agent";
 import { HelmMark } from "./Brand";
 import { cx } from "./ui";
 
 interface Msg {
+  id: string;
   role: "user" | "helm";
   text: string;
   answer?: AskAnswer;
+  source?: AgentSource;
+  pending?: boolean;
 }
 
 export function AskSheet({
@@ -21,18 +25,43 @@ export function AskSheet({
 }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const seq = useRef(0);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs]);
 
-  function ask(text: string) {
+  async function ask(text: string) {
     const t = text.trim();
-    if (!t) return;
-    const ans = answerQuestion(t, ctx);
-    setMsgs((m) => [...m, { role: "user", text: t }, { role: "helm", text: ans.text, answer: ans }]);
+    if (!t || busy) return;
     setInput("");
+    setBusy(true);
+    const id = `m${++seq.current}`;
+    setMsgs((m) => [
+      ...m,
+      { id: `${id}u`, role: "user", text: t },
+      { id, role: "helm", text: "", pending: true },
+    ]);
+    // Stream from Claude when available; the rule engine is the built-in fallback.
+    const res = await askAgent(t, ctx, (soFar) => {
+      setMsgs((m) => m.map((msg) => (msg.id === id ? { ...msg, text: soFar, pending: false } : msg)));
+    });
+    setMsgs((m) =>
+      m.map((msg) =>
+        msg.id === id
+          ? {
+              ...msg,
+              text: res.text || msg.text,
+              source: res.source,
+              answer: res.source === "rules" ? res : undefined,
+              pending: false,
+            }
+          : msg,
+      ),
+    );
+    setBusy(false);
   }
 
   return (
@@ -72,15 +101,15 @@ export function AskSheet({
           </div>
         )}
 
-        {msgs.map((m, i) =>
+        {msgs.map((m) =>
           m.role === "user" ? (
-            <div key={i} className="flex justify-end">
+            <div key={m.id} className="flex justify-end">
               <div className="max-w-[80%] rounded-2xl rounded-br-md bg-white px-3.5 py-2.5 text-[14px] font-medium text-black">
                 {m.text}
               </div>
             </div>
           ) : (
-            <div key={i} className="flex gap-2.5">
+            <div key={m.id} className="flex gap-2.5">
               <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-violet-500/15">
                 <HelmMark size={15} className="text-violet-300" />
               </div>
@@ -96,7 +125,11 @@ export function AskSheet({
                       {m.answer.metric}
                     </div>
                   )}
-                  <p className="text-[13.5px] leading-relaxed text-white/80">{m.text}</p>
+                  {m.pending && !m.text ? (
+                    <Typing />
+                  ) : (
+                    <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed text-white/80">{m.text}</p>
+                  )}
                   {m.answer?.businessId && (
                     <button
                       onClick={() => onOpenBusiness(m.answer!.businessId!)}
@@ -106,6 +139,11 @@ export function AskSheet({
                     </button>
                   )}
                 </div>
+                {m.source && !m.pending && (
+                  <p className="mt-1 pl-1 text-[10px] font-medium text-white/30">
+                    {m.source === "claude" ? "Claude · grounded in your numbers" : "Offline · rule engine"}
+                  </p>
+                )}
               </div>
             </div>
           ),
@@ -129,7 +167,7 @@ export function AskSheet({
           />
           <button
             type="submit"
-            disabled={!input.trim()}
+            disabled={!input.trim() || busy}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-black active:scale-90 disabled:opacity-40"
           >
             <ArrowUp size={18} strokeWidth={2.6} />
@@ -137,5 +175,20 @@ export function AskSheet({
         </form>
       </div>
     </div>
+  );
+}
+
+/** Three-dot "thinking" indicator shown while the first token is in flight. */
+function Typing() {
+  return (
+    <span className="inline-flex items-center gap-1 py-0.5">
+      {[0, 150, 300].map((d) => (
+        <span
+          key={d}
+          className="h-1.5 w-1.5 animate-pulse rounded-full bg-white/40"
+          style={{ animationDelay: `${d}ms` }}
+        />
+      ))}
+    </span>
   );
 }

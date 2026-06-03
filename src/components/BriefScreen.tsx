@@ -105,6 +105,7 @@ export function BriefScreen({
   empire,
   insights,
   source,
+  aiBrief,
   onOpenBusiness,
   onToast,
   onSeeAll,
@@ -116,6 +117,8 @@ export function BriefScreen({
   empire: EmpireSummary;
   insights: Insight[];
   source: DataSource;
+  /** Claude-written morning read (null when the model isn't configured → falls back to the rule cards). */
+  aiBrief?: string | null;
   onOpenBusiness: (id: string) => void;
   onToast: (msg: string) => void;
   onSeeAll: () => void;
@@ -207,6 +210,17 @@ export function BriefScreen({
         <span className="text-[14px] text-white/50">Ask Helm anything…</span>
         <Sparkles size={15} className="ml-auto text-violet-300/70" />
       </button>
+
+      {/* Helm's read — Claude's prioritized morning narrative (only when configured) */}
+      {aiBrief && (
+        <Card className="border-violet-400/15 bg-violet-500/[0.06] p-4">
+          <div className="mb-1.5 flex items-center gap-1.5">
+            <HelmMark size={14} className="text-violet-300" />
+            <span className="text-[11px] font-bold uppercase tracking-wide text-violet-300">Helm's read</span>
+          </div>
+          <p className="text-[14px] leading-relaxed text-white/85">{aiBrief}</p>
+        </Card>
+      )}
 
       {/* The Brief */}
       <section>
