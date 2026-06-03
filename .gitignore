@@ -1,0 +1,25 @@
+node_modules
+dist
+dist-ssr
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Plaid connector access tokens (local link state)
+server/.tokens.json
+
+# Real business data (keep private; app falls back to bundled sample data)
+public/data.json
+
+# Internal working docs (not for the public product repo)
+HANDOFF.md
+COWORK_SCRAPE_PROMPT.md
+MARKET_RESEARCH.md
+PRODUCT_PLAN.md
+
+# Misc
+.DS_Store
+*.log
+*.local
