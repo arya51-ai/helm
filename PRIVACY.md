@@ -48,4 +48,4 @@ Your use of Plaid to link accounts is also governed by Plaid's
 
 ## Contact
 
-Questions about this policy or your data: **&lt;set your contact email here&gt;**
+Questions about this policy or your data: **aryamehta0903@gmail.com**
