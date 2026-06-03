@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { ChevronLeft, MapPin, Coins, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, Coins, RefreshCw, SlidersHorizontal } from "lucide-react";
 import type { Business, Currency } from "../types";
 import type { Metrics } from "../lib/analytics";
 import { usd, usdCompact, money, pct, signedPct, signedUsd, daysAgo, weekday, shortDate } from "../lib/format";
 import { DISPLAY_CURRENCY, RATES_TO_USD, fromUSD } from "../lib/currency";
 import { Card, Delta, cx } from "./ui";
-import { AreaTrend } from "./charts";
+import { AreaTrend, DayBars, HBars, DowBars, CalendarHeatmap, TrendRibbon } from "./charts";
 import { benchmarkFor } from "../lib/benchmark";
+import { expectedFor, dowAverages, rangeBreakdown } from "../lib/breakdowns";
+import { DayDetail } from "./DayDetail";
 
 const RANGES = [
   { label: "1W", days: 7 },
@@ -26,6 +28,7 @@ export function BusinessDetail({
   onEdit: () => void;
 }) {
   const [range, setRange] = useState(1);
+  const [dayIdx, setDayIdx] = useState<number | null>(null);
   const isPort = business.type === "portfolio";
   // A business that reports in a non-display currency (e.g. Subway in CAD) gets a CAD/USD switch.
   const isForeign = !isPort && !!business.currency && business.currency !== DISPLAY_CURRENCY;
@@ -38,12 +41,40 @@ export function BusinessDetail({
   const data = business.series
     .slice(-days)
     .map((p) => ({ date: p.date, revenue: cur === DISPLAY_CURRENCY ? p.revenue : fromUSD(p.revenue, cur) }));
+
+  // ── Richer analytics (operating businesses) ──
+  const n = business.series.length;
+  const start = Math.max(0, n - days);
+  const toCur = (v: number) => (cur === DISPLAY_CURRENCY ? v : fromUSD(v, cur));
+  const barData = isPort
+    ? []
+    : business.series.slice(start).map((p, j) => ({
+        date: p.date,
+        revenue: toCur(p.revenue),
+        expected: toCur(expectedFor(business, start + j)),
+      }));
+  const rb = isPort ? null : rangeBreakdown(business, days);
+  const dow = isPort ? [] : dowAverages(business, days);
+  const bestDow = dow.find((s) => s.best);
+  const worstDow = dow.find((s) => s.worst);
+  const recentIdx = isPort ? [] : Array.from({ length: Math.min(8, n) }, (_, k) => n - 1 - k);
+  const lastIndexOfDow = (d: number) => {
+    for (let i = n - 1; i >= 0; i--) if (new Date(`${business.series[i].date}T00:00:00`).getDay() === d) return i;
+    return -1;
+  };
+  const selDate = dayIdx != null ? business.series[dayIdx].date : null;
+  const pickDay = (date: string) => {
+    const i = business.series.findIndex((p) => p.date === date);
+    if (i >= 0) setDayIdx(i);
+  };
+
   const asOf = business.series.at(-1)!.date;
   const lag = daysAgo(asOf);
   const revLabel =
     lag <= 0 ? "Today's revenue" : lag === 1 ? "Yesterday's revenue" : `Latest · ${weekday(asOf)} ${shortDate(asOf)}`;
 
   return (
+    <>
     <div className="fixed inset-0 z-40 mx-auto flex max-w-[440px] flex-col bg-[#0a0b10]">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-5">
@@ -144,9 +175,34 @@ export function BusinessDetail({
           ))}
         </div>
 
-        <Card className="p-3 pt-4">
-          <AreaTrend data={data} color={business.accent} height={180} showAxis currency={cur} />
-        </Card>
+        {isPort ? (
+          <Card className="p-3 pt-4">
+            <AreaTrend data={data} color={business.accent} height={180} showAxis currency={cur} />
+          </Card>
+        ) : range === 0 ? (
+          <Card className="p-3 pt-3">
+            <DayBars data={barData} color={business.accent} currency={cur} selected={selDate} onSelect={pickDay} />
+          </Card>
+        ) : (
+          <Card className="p-4">
+            <div className="mb-1.5 flex items-baseline justify-between px-0.5">
+              <span className="text-[12px] font-medium text-white/45">{days}-day trend</span>
+              <span className="text-[11px] text-white/35">
+                {shortDate(data[0].date)} – {shortDate(data[data.length - 1].date)}
+              </span>
+            </div>
+            <TrendRibbon data={data} color={business.accent} height={88} />
+            <div className="mt-4 border-t border-white/[0.06] pt-4">
+              <CalendarHeatmap
+                points={data.map((p) => ({ date: p.date, value: p.revenue }))}
+                color={business.accent}
+                selected={selDate}
+                onSelect={pickDay}
+                fmt={(v) => money(v, cur)}
+              />
+            </div>
+          </Card>
+        )}
 
         {/* KPI grid */}
         <div className="grid grid-cols-2 gap-3">
@@ -168,6 +224,94 @@ export function BusinessDetail({
             </>
           )}
         </div>
+
+        {/* ── Day-level analytics (operating businesses) ── */}
+        {!isPort && rb && (
+          <>
+            {/* Recent days — tap to drill into any day */}
+            <DetailSection title="Recent days" hint="tap a day">
+              <Card className="divide-y divide-white/[0.05]">
+                {recentIdx.map((i) => {
+                  const p = business.series[i];
+                  const exp = expectedFor(business, i);
+                  const vs = exp ? p.revenue / exp - 1 : 0;
+                  return (
+                    <button
+                      key={p.date}
+                      onClick={() => setDayIdx(i)}
+                      className="flex w-full items-center gap-3 p-3.5 text-left active:bg-white/[0.02]"
+                    >
+                      <div className="w-12 shrink-0">
+                        <p className="text-[13px] font-semibold text-white">{weekday(p.date)}</p>
+                        <p className="text-[11px] text-white/40">{shortDate(p.date)}</p>
+                      </div>
+                      <div className="flex-1" />
+                      <div className="text-right">
+                        <p className="text-[14px] font-semibold text-white tabular-nums">{m(p.revenue)}</p>
+                        <p className="text-[11px] text-white/40">{p.transactions} txns</p>
+                      </div>
+                      <Delta value={vs} className="ml-1" />
+                      <ChevronRight size={16} className="text-white/25" />
+                    </button>
+                  );
+                })}
+              </Card>
+            </DetailSection>
+
+            {/* Day-of-week pattern */}
+            <DetailSection
+              title="Day-of-week pattern"
+              hint={bestDow ? `best ${bestDow.label}${worstDow ? ` · slow ${worstDow.label}` : ""}` : undefined}
+            >
+              <Card className="p-4 pt-5">
+                <DowBars
+                  stats={dow}
+                  color={business.accent}
+                  onSelectDow={(d) => {
+                    const i = lastIndexOfDow(d);
+                    if (i >= 0) setDayIdx(i);
+                  }}
+                />
+                {bestDow && (
+                  <p className="mt-3 text-[11px] text-white/40">
+                    {bestDow.label} averages {m(bestDow.avg)}/day
+                    {worstDow ? ` · ${worstDow.label} the slowest at ${m(worstDow.avg)}` : ""}. Tap a bar for that day.
+                  </p>
+                )}
+              </Card>
+            </DetailSection>
+
+            {/* Sales by daypart */}
+            <DetailSection title="Sales by daypart" hint={`last ${days}d`}>
+              <Card className="p-4">
+                <HBars segs={rb.dayparts} fmt={(v) => m(v)} />
+              </Card>
+            </DetailSection>
+
+            {/* Product / category mix */}
+            <DetailSection title={rb.kind === "restaurant" ? "Product mix" : "Category mix"} hint={`last ${days}d`}>
+              <Card className="p-4">
+                <HBars segs={rb.categories} fmt={(v) => m(v)} />
+              </Card>
+            </DetailSection>
+
+            {/* Order channel (restaurant) */}
+            {rb.channels.length > 0 && (
+              <DetailSection title="Order channel" hint={`last ${days}d`}>
+                <Card className="p-4">
+                  <HBars segs={rb.channels} fmt={(v) => m(v)} />
+                </Card>
+              </DetailSection>
+            )}
+
+            {/* Payment type */}
+            <DetailSection title="Payment type" hint={`last ${days}d`}>
+              <Card className="p-4">
+                <HBars segs={rb.payments} fmt={(v) => m(v)} />
+              </Card>
+            </DetailSection>
+          </>
+        )}
 
         {/* Peer benchmark (operating businesses) */}
         {bench && (
@@ -239,6 +383,28 @@ export function BusinessDetail({
           </div>
         )}
       </div>
+    </div>
+    {!isPort && dayIdx != null && (
+      <DayDetail
+        business={business}
+        index={dayIdx}
+        cur={cur}
+        onClose={() => setDayIdx(null)}
+        onNav={(i) => setDayIdx(Math.max(0, Math.min(n - 1, i)))}
+      />
+    )}
+    </>
+  );
+}
+
+function DetailSection({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between px-1">
+        <h2 className="text-[14px] font-semibold text-white/90">{title}</h2>
+        {hint && <span className="text-[11px] text-white/35">{hint}</span>}
+      </div>
+      {children}
     </div>
   );
 }
