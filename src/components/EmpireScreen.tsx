@@ -3,6 +3,7 @@ import type { Business, Currency } from "../types";
 import type { Metrics, EmpireSummary } from "../lib/analytics";
 import { usd, usdCompact, pct, signedUsd, signedPct } from "../lib/format";
 import { DISPLAY_CURRENCY, RATES_TO_USD } from "../lib/currency";
+import { empireCashProjection } from "../lib/forecast";
 import { Card, Delta, SectionTitle, cx } from "./ui";
 import { AreaTrend } from "./charts";
 
@@ -61,21 +62,12 @@ export function EmpireScreen({
   const market = ranked.find((r) => r.id === portfolio.id)!;
   const upside = idleCash * best.roic - idleCash * market.roic;
 
-  // Cash flow: profitable ops throw off cash; project the bankable balance forward.
-  const monthlyNet = Math.round(ops.reduce((a, b) => a + metricsBy[b.id].monthlyProfit, 0));
-  const projMonths = 6;
-  const cashStart = (() => {
-    const d = new Date();
-    d.setDate(1);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  })();
-  const projection = Array.from({ length: projMonths + 1 }, (_, i) => {
-    const d = new Date(cashStart);
-    d.setMonth(d.getMonth() + i);
-    return { date: d.toISOString().slice(0, 10), revenue: idleCash + monthlyNet * i };
-  });
-  const cashIn6 = idleCash + monthlyNet * projMonths;
+  // Cash flow: forecast each business's revenue forward, bank the net profit onto idle
+  // cash. Growth-aware (bends with each business's trend), not a flat run-rate.
+  const cashProj = empireCashProjection(businesses, idleCash, 6);
+  const monthlyNet = cashProj.monthlyNet;
+  const projection = cashProj.points;
+  const cashIn6 = cashProj.totalIn;
 
   return (
     <div className="animate-fade-up space-y-7 px-4 pb-6 pt-2">
@@ -171,8 +163,8 @@ export function EmpireScreen({
             <AreaTrend data={projection} color="#34d399" height={90} />
           </div>
           <p className="mt-2 text-[12px] leading-relaxed text-white/45">
-            Your businesses throw off <span className="font-semibold text-white/80">{usd(monthlyNet)}/mo</span> in
-            net profit. Banked, that's <span className="font-semibold text-white/80">{usd(cashIn6)}</span> in 6
+            Forecast on your current trend: ~<span className="font-semibold text-white/80">{usd(monthlyNet)}/mo</span> in
+            net profit, banking to <span className="font-semibold text-white/80">{usd(cashIn6)}</span> by 6
             months — capital you could redeploy.
           </p>
         </Card>

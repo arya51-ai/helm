@@ -2,12 +2,14 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, MapPin, Coins, RefreshCw, SlidersHorizontal } from "lucide-react";
 import type { Business, Currency } from "../types";
 import type { Metrics } from "../lib/analytics";
-import { usd, usdCompact, money, pct, signedPct, signedUsd, daysAgo, weekday, shortDate } from "../lib/format";
+import { usd, usdCompact, money, pct, signedPct, signedUsd, daysAgo, weekday, shortDate, currencySymbol } from "../lib/format";
 import { DISPLAY_CURRENCY, RATES_TO_USD, fromUSD } from "../lib/currency";
 import { Card, Delta, cx } from "./ui";
-import { AreaTrend, DayBars, HBars, DowBars, CalendarHeatmap, TrendRibbon } from "./charts";
+import { AreaTrend, DayBars, HBars, DowBars, CalendarHeatmap, TrendRibbon, ForecastChart } from "./charts";
 import { benchmarkFor } from "../lib/benchmark";
 import { expectedFor, dowAverages, rangeBreakdown } from "../lib/breakdowns";
+import { forecastDaily, summarizeForecast, paceToGoal } from "../lib/forecast";
+import { goalFor, setGoal } from "../data/goals";
 import { DayDetail } from "./DayDetail";
 
 const RANGES = [
@@ -30,6 +32,10 @@ export function BusinessDetail({
   const [range, setRange] = useState(1);
   const [dayIdx, setDayIdx] = useState<number | null>(null);
   const isPort = business.type === "portfolio";
+  // Monthly revenue goal (USD), persisted; editable inline.
+  const [goal, setGoalState] = useState<number>(() => (business.type === "portfolio" ? 0 : goalFor(business.id)));
+  const [goalEdit, setGoalEdit] = useState(false);
+  const [goalInput, setGoalInput] = useState("");
   // A business that reports in a non-display currency (e.g. Subway in CAD) gets a CAD/USD switch.
   const isForeign = !isPort && !!business.currency && business.currency !== DISPLAY_CURRENCY;
   const [cur, setCur] = useState<Currency>(DISPLAY_CURRENCY);
@@ -66,6 +72,23 @@ export function BusinessDetail({
   const pickDay = (date: string) => {
     const i = business.series.findIndex((p) => p.date === date);
     if (i >= 0) setDayIdx(i);
+  };
+
+  // ── Forecast + pace-to-goal (operating businesses) ──
+  const toUsd = (v: number) => (cur === DISPLAY_CURRENCY ? v : v * RATES_TO_USD[cur as Currency]);
+  const fc30 = isPort ? null : summarizeForecast(business.series, 30);
+  const fcActual = isPort ? [] : business.series.slice(-21).map((p) => ({ date: p.date, revenue: toCur(p.revenue) }));
+  const fcBand = isPort
+    ? []
+    : forecastDaily(business.series, 21).map((f) => ({ date: f.date, mean: toCur(f.mean), lo: toCur(f.lo), hi: toCur(f.hi) }));
+  const pace = !isPort && goal > 0 ? paceToGoal(business.series, goal) : null;
+  const saveGoal = () => {
+    const v = parseFloat(goalInput.replace(/[^0-9.]/g, ""));
+    const usd = v > 0 ? Math.round(toUsd(v)) : 0;
+    setGoal(business.id, usd);
+    setGoalState(usd);
+    setGoalEdit(false);
+    setGoalInput("");
   };
 
   const asOf = business.series.at(-1)!.date;
@@ -224,6 +247,100 @@ export function BusinessDetail({
             </>
           )}
         </div>
+
+        {/* ── Forecast + pace-to-goal (operating businesses) ── */}
+        {!isPort && fc30 && (
+          <DetailSection title="Forecast" hint="next 30 days">
+            <Card className="p-4">
+              <div className="flex items-baseline justify-between px-0.5">
+                <div>
+                  <p className="text-[12px] font-medium text-white/45">Projected revenue</p>
+                  <p className="mt-0.5 text-[24px] font-bold tracking-tight text-white tabular-nums">{m(fc30.total)}</p>
+                </div>
+                <p className="text-[11px] text-white/35 tabular-nums">
+                  range {m(fc30.lo)} – {m(fc30.hi)}
+                </p>
+              </div>
+              <div className="mt-3">
+                <ForecastChart actual={fcActual} forecast={fcBand} color={business.accent} />
+              </div>
+              <div className="mt-1 flex items-center justify-center gap-4 text-[10px] text-white/35">
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-[2px] w-3" style={{ background: business.accent }} /> actual
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-[2px] w-3 border-t border-dashed" style={{ borderColor: business.accent }} /> forecast
+                </span>
+              </div>
+
+              {/* Pace to goal */}
+              <div className="mt-4 border-t border-white/[0.06] pt-4">
+                {pace ? (
+                  <>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-[12px] font-medium text-white/55">
+                        Monthly goal · {m(pace.goal)}
+                      </span>
+                      <span
+                        className={cx(
+                          "rounded-md px-1.5 py-0.5 text-[10px] font-bold",
+                          pace.onTrack ? "bg-emerald-400/12 text-emerald-400" : "bg-amber-400/12 text-amber-400",
+                        )}
+                      >
+                        {pace.onTrack ? "On track" : "Behind pace"}
+                      </span>
+                    </div>
+                    <div className="relative h-2.5 overflow-hidden rounded-full bg-white/[0.06]">
+                      <div
+                        className="absolute inset-y-0 left-0 rounded-full"
+                        style={{
+                          width: `${Math.min(100, Math.max(2, pace.fractionToGoal * 100))}%`,
+                          background: pace.onTrack ? "#34d399" : "#fbbf24",
+                        }}
+                      />
+                      <div
+                        className="absolute inset-y-0 w-px bg-white/40"
+                        style={{ left: `${(pace.daysElapsed / pace.daysInMonth) * 100}%` }}
+                      />
+                    </div>
+                    <div className="mt-1.5 flex items-center justify-between text-[11px] text-white/40 tabular-nums">
+                      <span>{m(pace.mtdActual)} so far</span>
+                      <span>projected {m(pace.projectedMonthEnd)}</span>
+                    </div>
+                    <button onClick={() => setGoalEdit(true)} className="mt-2 text-[11px] font-medium text-violet-300">
+                      Edit goal
+                    </button>
+                  </>
+                ) : goalEdit ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] font-medium text-white/60">Monthly goal</span>
+                    <div className="flex items-center rounded-xl border border-white/[0.07] bg-white/[0.03] px-2.5 py-1.5">
+                      <span className="text-[14px] font-semibold text-white/50">{currencySymbol(cur)}</span>
+                      <input
+                        autoFocus
+                        value={goalInput}
+                        onChange={(e) => setGoalInput(e.target.value)}
+                        inputMode="decimal"
+                        placeholder="0"
+                        className="w-20 bg-transparent text-[14px] font-semibold text-white outline-none"
+                      />
+                    </div>
+                    <button onClick={saveGoal} className="rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold text-black active:scale-95">
+                      Set
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setGoalEdit(true)}
+                    className="text-[13px] font-medium text-violet-300"
+                  >
+                    + Set a monthly goal
+                  </button>
+                )}
+              </div>
+            </Card>
+          </DetailSection>
+        )}
 
         {/* ── Day-level analytics (operating businesses) ── */}
         {!isPort && rb && (

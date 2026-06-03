@@ -428,6 +428,93 @@ export function CalendarHeatmap({
   );
 }
 
+export interface ForecastBand {
+  date: string;
+  mean: number;
+  lo: number;
+  hi: number;
+}
+
+/**
+ * Actuals (solid) flowing into a forecast (dashed mean + shaded lo–hi band). The forecast
+ * is anchored to the last actual point so the line is continuous. Values are already in the
+ * display currency.
+ */
+export function ForecastChart({
+  actual,
+  forecast,
+  color,
+  height = 140,
+}: {
+  actual: { date: string; revenue: number }[];
+  forecast: ForecastBand[];
+  color: string;
+  height?: number;
+}) {
+  const [ref, w] = useWidth<HTMLDivElement>();
+  const A = actual.length;
+  const F = forecast.length;
+  const N = A + F;
+  const lastActual = A ? actual[A - 1].revenue : forecast[0]?.mean ?? 0;
+  const vals = [...actual.map((a) => a.revenue), ...forecast.flatMap((f) => [f.lo, f.hi, f.mean]), 0];
+  const min = Math.min(...vals);
+  const max = Math.max(...vals, 1);
+  const range = max - min || 1;
+  const padT = 12;
+  const padB = 18;
+  const innerH = height - padT - padB;
+  const x = (i: number) => (N > 1 ? (i / (N - 1)) * w : w / 2);
+  const y = (v: number) => padT + innerH - ((v - min) / range) * innerH;
+
+  const id = `fc-${color.replace(/[^a-z0-9]/gi, "")}`;
+  // Actual line + filled area to baseline.
+  const actPts = actual.map((a, i) => `${x(i).toFixed(1)},${y(a.revenue).toFixed(1)}`);
+  const actLine = A ? `M${actPts.join(" L")}` : "";
+  const actArea = A ? `${actLine} L${x(A - 1).toFixed(1)},${height} L0,${height} Z` : "";
+  // Forecast mean: anchor at the last actual (index A-1), then each forecast point (A..N-1).
+  const fcMean = forecast.map((f, i) => `${x(A + i).toFixed(1)},${y(f.mean).toFixed(1)}`);
+  const fcLine = F ? `M${x(A - 1).toFixed(1)},${y(lastActual).toFixed(1)} L${fcMean.join(" L")}` : "";
+  // Band polygon: hi across (left→right), then lo back (right→left), anchored at last actual.
+  const hiPts = forecast.map((f, i) => `${x(A + i).toFixed(1)},${y(f.hi).toFixed(1)}`);
+  const loPts = forecast.map((f, i) => `${x(A + i).toFixed(1)},${y(f.lo).toFixed(1)}`).reverse();
+  const anchor = `${x(A - 1).toFixed(1)},${y(lastActual).toFixed(1)}`;
+  const band = F ? `M${anchor} L${hiPts.join(" L")} L${loPts.join(" L")} Z` : "";
+
+  return (
+    <div ref={ref} style={{ height }} className="w-full">
+      {w > 0 && N > 0 && (
+        <svg width={w} height={height} role="img">
+          <defs>
+            <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={color} stopOpacity={0.01} />
+            </linearGradient>
+          </defs>
+          {/* divider between actual and forecast */}
+          {A > 0 && F > 0 && (
+            <line x1={x(A - 1)} y1={padT} x2={x(A - 1)} y2={padT + innerH} stroke="rgba(255,255,255,0.12)" strokeDasharray="2 3" />
+          )}
+          <path d={actArea} fill={`url(#${id})`} />
+          {band && <path d={band} fill={color} fillOpacity={0.12} />}
+          <path d={actLine} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+          {fcLine && (
+            <path d={fcLine} fill="none" stroke={color} strokeWidth={2} strokeDasharray="4 3" strokeLinejoin="round" strokeLinecap="round" opacity={0.85} />
+          )}
+          {A > 0 && <circle cx={x(A - 1)} cy={y(lastActual)} r={3} fill={color} />}
+          <text x={2} y={height - 4} fontSize={9} fill="rgba(255,255,255,0.35)">
+            {actual[0] ? shortDate(actual[0].date) : ""}
+          </text>
+          {forecast[F - 1] && (
+            <text x={w - 2} y={height - 4} textAnchor="end" fontSize={9} fill="rgba(255,255,255,0.35)">
+              {shortDate(forecast[F - 1].date)}
+            </text>
+          )}
+        </svg>
+      )}
+    </div>
+  );
+}
+
 /** A clean, bold, full-width trend ribbon (custom SVG) — shows the shape at a glance. */
 export function TrendRibbon({
   data,
