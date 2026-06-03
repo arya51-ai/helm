@@ -18,6 +18,7 @@ import { usd } from "./lib/format";
 import type { Business } from "./types";
 import { metricsFor, empireSummary, type Metrics } from "./lib/analytics";
 import { buildInsights } from "./lib/insights";
+import { generateBrief } from "./lib/agent";
 import { BriefScreen, InsightCard } from "./components/BriefScreen";
 import { EmpireScreen } from "./components/EmpireScreen";
 import { BusinessesScreen } from "./components/BusinessesScreen";
@@ -75,6 +76,21 @@ export default function App() {
     const insights = buildInsights(businesses, metricsBy, { idleCash });
     return { metricsBy, empire, insights };
   }, [businesses, idleCash]);
+
+  // Claude-written morning read for the Brief. Null when no key is configured
+  // (the rule-engine insight cards stand on their own). Refetches when the data
+  // set meaningfully changes — not on every render.
+  const [aiBrief, setAiBrief] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    generateBrief({ businesses, metricsBy, empire, insights, idleCash }).then((t) => {
+      if (alive) setAiBrief(t);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empire.asOf, businesses.length, dataSource, idleCash]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -140,6 +156,7 @@ export default function App() {
               empire={empire}
               insights={insights}
               source={dataSource}
+              aiBrief={aiBrief}
               onOpenBusiness={setOpenBiz}
               onToast={showToast}
               onSeeAll={() => setAllInsights(true)}

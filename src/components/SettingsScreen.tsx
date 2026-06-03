@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   RefreshCw,
   Trash2,
@@ -7,7 +7,9 @@ import {
   ChevronRight,
   Check,
   Landmark,
+  Sparkles,
 } from "lucide-react";
+import { agentStatus } from "../lib/agent";
 import type { Business } from "../types";
 import type { DataSource } from "../data/source";
 import { clearImported } from "../data/source";
@@ -34,6 +36,14 @@ export function SettingsScreen({
   onToast: (m: string) => void;
 }) {
   const [cad, setCad] = useState(String(RATES_TO_USD.CAD));
+  const [brain, setBrain] = useState<{ available: boolean; askModel?: string } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    agentStatus().then((s) => alive && setBrain(s));
+    return () => {
+      alive = false;
+    };
+  }, []);
   const removedCount = readRemoved().length;
   const live = dataSource === "real";
   const lag = asOf ? daysAgo(asOf) : 0;
@@ -119,6 +129,39 @@ export function SettingsScreen({
               )}
             </div>
           ))}
+        </Card>
+      </section>
+
+      {/* Intelligence — which brain is answering */}
+      <section>
+        <SectionTitle>Intelligence</SectionTitle>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <span
+              className={cx(
+                "grid h-9 w-9 shrink-0 place-items-center rounded-2xl",
+                brain?.available ? "bg-violet-500/15" : "bg-white/[0.06]",
+              )}
+            >
+              <Sparkles size={17} className={brain?.available ? "text-violet-300" : "text-white/40"} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-semibold text-white">
+                {brain?.available ? "Claude — live" : "Offline — rule engine"}
+              </p>
+              <p className="text-[12px] text-white/40">
+                {brain?.available
+                  ? `Brief & Ask Helm reason with ${brain.askModel ?? "Claude"} over your real numbers`
+                  : "Smart heuristics over your numbers. Add an Anthropic API key to switch on Claude."}
+              </p>
+            </div>
+            <span
+              className={cx(
+                "h-2.5 w-2.5 shrink-0 rounded-full",
+                brain?.available ? "bg-emerald-400" : "bg-amber-400",
+              )}
+            />
+          </div>
         </Card>
       </section>
 

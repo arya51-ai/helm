@@ -28,6 +28,13 @@ function plaidConnector(): PluginOption {
       } catch (e) {
         server.config.logger.warn('Tally connector not mounted (Tally disabled): ' + ((e as Error)?.message ?? e))
       }
+      try {
+        const { createAgentApp } = await import('./server/agent.mjs')
+        server.middlewares.use('/api/agent', await createAgentApp())
+        server.config.logger.info('  ➜  Claude agent mounted at /api/agent')
+      } catch (e) {
+        server.config.logger.warn('Agent connector not mounted (Claude disabled): ' + ((e as Error)?.message ?? e))
+      }
     },
   }
 }
