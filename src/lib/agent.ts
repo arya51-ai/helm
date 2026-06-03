@@ -1,6 +1,8 @@
 import type { Business, Insight } from "../types";
 import type { Metrics, EmpireSummary } from "./analytics";
 import { answerQuestion, type AskContext, type AskAnswer } from "./ask";
+import { summarizeForecast, paceToGoal } from "./forecast";
+import { goalFor } from "../data/goals";
 
 /**
  * The Helm "brain" client. Talks to the server-side Claude connector (/api/agent),
@@ -53,28 +55,38 @@ export function buildAgentContext(ctx: AskContext, extra?: Record<string, unknow
     netMargin: b.netMargin != null ? r2(b.netMargin) : undefined,
   }));
   const metricsBy: Record<string, unknown> = {};
+  const goals: Record<string, unknown> = {};
   for (const b of ctx.businesses) {
     const m = ctx.metricsBy[b.id];
     if (!m) continue;
-    metricsBy[b.id] = m.isPortfolio
-      ? {
-          marketValue: r0(m.marketValue),
-          totalReturn: r2(m.totalReturn),
-          dayChangeUsd: r0(m.dayChangeUsd),
-          roic: r2(m.roic),
-        }
-      : {
-          today: r0(m.today),
-          vsExpected: r2(m.vsExpected),
-          expectedToday: r0(m.expectedToday),
-          wow: r2(m.wow),
-          weekToDate: r0(m.weekToDate),
-          last30: r0(m.last30),
-          roic: r2(m.roic),
-          monthlyProfit: r0(m.monthlyProfit),
-          transactionsToday: m.transactionsToday,
-          avgTicket: r2(m.avgTicket),
-        };
+    if (m.isPortfolio) {
+      metricsBy[b.id] = {
+        marketValue: r0(m.marketValue),
+        totalReturn: r2(m.totalReturn),
+        dayChangeUsd: r0(m.dayChangeUsd),
+        roic: r2(m.roic),
+      };
+    } else {
+      const fc = summarizeForecast(b.series, 30);
+      metricsBy[b.id] = {
+        today: r0(m.today),
+        vsExpected: r2(m.vsExpected),
+        expectedToday: r0(m.expectedToday),
+        wow: r2(m.wow),
+        weekToDate: r0(m.weekToDate),
+        last30: r0(m.last30),
+        roic: r2(m.roic),
+        monthlyProfit: r0(m.monthlyProfit),
+        transactionsToday: m.transactionsToday,
+        avgTicket: r2(m.avgTicket),
+        forecastNext30: fc ? r0(fc.total) : null,
+      };
+      const goal = goalFor(b.id);
+      if (goal > 0) {
+        const p = paceToGoal(b.series, goal);
+        if (p) goals[b.id] = { goal: r0(p.goal), mtdActual: r0(p.mtdActual), projectedMonthEnd: r0(p.projectedMonthEnd), onTrack: p.onTrack };
+      }
+    }
   }
   const e = ctx.empire;
   return {
@@ -98,6 +110,7 @@ export function buildAgentContext(ctx: AskContext, extra?: Record<string, unknow
       detail: i.detail,
       priority: Math.round(i.priority),
     })),
+    ...(Object.keys(goals).length ? { goals } : {}),
     ...(extra ?? {}),
   };
 }
