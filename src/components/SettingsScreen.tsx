@@ -20,6 +20,7 @@ import { RATES_TO_USD, setRateToUSD, resetRates } from "../lib/currency";
 import { longDate, shortDate, daysAgo } from "../lib/format";
 import { Card, SectionTitle, cx } from "./ui";
 import { HelmMark } from "./Brand";
+import { getFxTimestamp, updateFxRates } from "../lib/fxFeed";
 
 export function SettingsScreen({
   owner,
@@ -37,6 +38,7 @@ export function SettingsScreen({
   onToast: (m: string) => void;
 }) {
   const [cad, setCad] = useState(String(RATES_TO_USD.CAD));
+  const [fxTimestamp, setFxTimestamp] = useState(getFxTimestamp());
   const [brain, setBrain] = useState<{ available: boolean; askModel?: string } | null>(null);
   useEffect(() => {
     let alive = true;
@@ -101,6 +103,27 @@ export function SettingsScreen({
     onReload();
     onToast("FX rate updated ✓");
   }
+
+  async function refreshFx() {
+    const ok = await updateFxRates();
+    if (ok) {
+      setFxTimestamp(getFxTimestamp());
+      setCad(String(RATES_TO_USD.CAD));
+      onReload();
+      onToast("Live rates fetched ✓");
+    } else {
+      onToast("Couldn't reach rate feed — using cached rates");
+    }
+  }
+
+  const fxAge =
+    fxTimestamp === 0
+      ? "—"
+      : new Date().getTime() - fxTimestamp < 3600000
+        ? "just now"
+        : new Date().getTime() - fxTimestamp < 86400000
+          ? "today"
+          : daysAgo(new Date(fxTimestamp).toISOString());
 
   return (
     <div className="animate-fade-up space-y-7 px-4 pb-6 pt-2">
@@ -245,9 +268,21 @@ export function SettingsScreen({
               Save
             </button>
           </div>
+          <div className="mt-3 flex items-center justify-between">
+            <p className="text-[11px] text-white/50">Live rates</p>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-white/40">Updated {fxAge}</span>
+              <button
+                onClick={refreshFx}
+                className="rounded-full bg-white/[0.1] px-3 py-1.5 text-[11px] font-semibold text-white/70 active:scale-95"
+              >
+                Fetch
+              </button>
+            </div>
+          </div>
           <p className="mt-2 text-[11px] text-white/35">
-            Your Subway reports in CAD; everything is converted to USD for combined totals. Swap for a live
-            feed later.
+            Your Subway reports in CAD; everything is converted to USD for combined totals. Rates auto-update
+            on app start.
           </p>
         </Card>
       </section>
