@@ -132,11 +132,17 @@ export interface EmpireSummary {
   revenueDayChange: number;
   weekToDate: number;
   last30: number;
-  /** Net worth = investments + idle cash + business equity */
+  /** Net worth = total assets − total liabilities */
   netWorth: number;
   investments: number;
   cash: number;
   businessEquity: number;
+  /** Total assets = investments + cash + business equity + manual assets. */
+  totalAssets: number;
+  /** User-entered manual assets (real estate, savings elsewhere, etc.). */
+  manualAssets: number;
+  /** Total liabilities (mortgages, loans, cards) — net worth subtracts these. */
+  liabilities: number;
   /** Net worth $ change today (driven by the portfolio's daily move) */
   netWorthDayChange: number;
   /** Combined 14-day operating revenue series for the hero chart */
@@ -149,6 +155,7 @@ export function empireSummary(
   businesses: Business[],
   metricsBy: Record<string, Metrics>,
   idleCash: number,
+  manual?: { assets: number; liabilities: number },
 ): EmpireSummary {
   const ops = businesses.filter((b) => b.type !== "portfolio");
   const portfolio = businesses.find((b) => b.type === "portfolio");
@@ -161,7 +168,10 @@ export function empireSummary(
 
   const investments = pm?.marketValue ?? 0;
   const businessEquity = ops.reduce((a, b) => a + b.capitalDeployed, 0);
-  const netWorth = investments + idleCash + businessEquity;
+  const manualAssets = manual?.assets ?? 0;
+  const liabilities = manual?.liabilities ?? 0;
+  const totalAssets = investments + idleCash + businessEquity + manualAssets;
+  const netWorth = totalAssets - liabilities;
 
   // Combined operating revenue across the last 14 distinct dates (hero chart).
   // Aligned by date so businesses with different histories still sum correctly.
@@ -196,6 +206,9 @@ export function empireSummary(
     investments,
     cash: idleCash,
     businessEquity,
+    totalAssets,
+    manualAssets,
+    liabilities,
     netWorthDayChange: pm?.dayChangeUsd ?? 0,
     combinedSeries,
     asOf,

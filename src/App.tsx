@@ -18,6 +18,7 @@ import { usd } from "./lib/format";
 import type { Business, Insight } from "./types";
 import { metricsFor, empireSummary, type Metrics } from "./lib/analytics";
 import { buildInsights } from "./lib/insights";
+import { readNetWorth, manualAssetTotal, manualLiabilityTotal, type NetWorthStore } from "./data/networth";
 import { generateBrief } from "./lib/agent";
 import { useDailyRefresh } from "./lib/useDailyRefresh";
 import { BriefScreen, InsightCard } from "./components/BriefScreen";
@@ -72,13 +73,20 @@ export default function App() {
     };
   }, []);
 
+  // Manual net-worth items (assets / liabilities / income Helm doesn't auto-track).
+  const [netWorth, setNetWorth] = useState<NetWorthStore>(() => readNetWorth());
+  const refreshNetWorth = () => setNetWorth(readNetWorth());
+
   const { metricsBy, empire, insights } = useMemo(() => {
     const metricsBy: Record<string, Metrics> = {};
     for (const b of businesses) metricsBy[b.id] = metricsFor(b);
-    const empire = empireSummary(businesses, metricsBy, idleCash);
+    const empire = empireSummary(businesses, metricsBy, idleCash, {
+      assets: manualAssetTotal(netWorth),
+      liabilities: manualLiabilityTotal(netWorth),
+    });
     const insights = buildInsights(businesses, metricsBy, { idleCash });
     return { metricsBy, empire, insights };
-  }, [businesses, idleCash]);
+  }, [businesses, idleCash, netWorth]);
 
   // Claude-written morning read for the Brief. Null when no key is configured
   // (the rule-engine insight cards stand on their own). Refetches when the data
@@ -178,9 +186,11 @@ export default function App() {
               metricsBy={metricsBy}
               empire={empire}
               idleCash={idleCash}
+              netWorth={netWorth}
               onOpenBusiness={setOpenBiz}
               onToast={showToast}
               onConnectCash={connectCash}
+              onNetWorthChange={refreshNetWorth}
             />
           )}
           {tab === "businesses" && (

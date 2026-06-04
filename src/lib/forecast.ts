@@ -180,6 +180,8 @@ export function empireCashProjection(
   businesses: Business[],
   idleCash: number,
   months = 6,
+  /** Extra net monthly cash from manual sources (income streams + asset income − loan payments). */
+  extraMonthly = 0,
 ): CashProjection {
   const ops = businesses.filter((b) => b.type !== "portfolio");
   const days = months * 30;
@@ -195,7 +197,7 @@ export function empireCashProjection(
   const points = [{ date: isoDate(start), revenue: Math.round(idleCash) }];
   let cum = idleCash;
   for (let m = 1; m <= months; m++) {
-    cum += dailyNet.slice((m - 1) * 30, m * 30).reduce((a, b) => a + b, 0);
+    cum += dailyNet.slice((m - 1) * 30, m * 30).reduce((a, b) => a + b, 0) + extraMonthly;
     const d = new Date(start);
     d.setMonth(d.getMonth() + m);
     points.push({ date: isoDate(d), revenue: Math.round(cum) });
@@ -203,6 +205,6 @@ export function empireCashProjection(
   return {
     points,
     totalIn: Math.round(cum),
-    monthlyNet: Math.round(dailyNet.slice(0, 30).reduce((a, b) => a + b, 0)),
+    monthlyNet: Math.round(dailyNet.slice(0, 30).reduce((a, b) => a + b, 0) + extraMonthly),
   };
 }
