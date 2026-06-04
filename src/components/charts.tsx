@@ -319,12 +319,15 @@ export function CalendarHeatmap({
   selected,
   onSelect,
   fmt,
+  marks,
 }: {
   points: CalPoint[];
   color: string;
   selected?: string | null;
   onSelect?: (date: string) => void;
   fmt: (n: number) => string;
+  /** ISO date → outlier kind, drawn as a corner dot (red = dip, amber = spike). */
+  marks?: Record<string, "spike" | "dip">;
 }) {
   if (!points.length) return null;
   const byDate = new Map(points.map((p) => [p.date, p.value]));
@@ -405,6 +408,12 @@ export function CalendarHeatmap({
                   <span className={cx("absolute left-1 top-0.5 text-[8px] leading-none", weekend ? "text-white/35" : "text-white/50")}>
                     {day.getDate()}
                   </span>
+                  {marks?.[iso] && (
+                    <span
+                      className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
+                      style={{ background: marks[iso] === "dip" ? "#ef4444" : "#f59e0b", boxShadow: "0 0 0 1.5px rgba(0,0,0,0.3)" }}
+                    />
+                  )}
                   <span className="text-[11px] font-bold leading-none text-white tabular-nums">{compactNum(v)}</span>
                 </button>
               );
@@ -413,7 +422,15 @@ export function CalendarHeatmap({
         ))}
       </div>
       <div className="mt-3 flex items-center justify-between text-[10px] text-white/40">
-        <span>tap a day to drill in</span>
+        <span className="flex items-center gap-2">
+          <span>tap a day</span>
+          {marks && Object.keys(marks).length > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#ef4444" }} />
+              outlier
+            </span>
+          )}
+        </span>
         <span className="flex items-center gap-1">
           less
           <span className="flex gap-0.5">

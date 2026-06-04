@@ -1,7 +1,7 @@
 import type { Business, Insight } from "../types";
 import type { Metrics } from "./analytics";
-import { usd, usdCompact, signedPct, pct } from "./format";
-import { weekday, daysAgo } from "./format";
+import { usd, usdCompact, signedPct, pct, weekday, daysAgo, shortDate } from "./format";
+import { empireAnomalies, type Anomaly } from "./anomalies";
 
 /**
  * The COO brain. Turns raw metrics across every business into a ranked feed of
@@ -16,45 +16,16 @@ export function buildInsights(
   const out: Insight[] = [];
   const ops = businesses.filter((b) => b.type !== "portfolio");
   const portfolio = businesses.find((b) => b.type === "portfolio");
-  const asOf = businesses[0].series.at(-1)!.date;
-  const todayName = weekday(asOf, true);
-  // POS data usually lags a day — when the latest close isn't literally today, the
-  // brief speaks in the past tense ("had a strong Tuesday") instead of pretending it's live.
-  const live = daysAgo(asOf) <= 0;
-
-  // ── Anomalies: today materially off its same-weekday expectation ──────────
-  for (const b of ops) {
-    const m = metricsBy[b.id];
-    if (m.vsExpected <= -0.12) {
-      const sev = Math.min(1, Math.abs(m.vsExpected) / 0.3);
-      out.push({
-        id: `alert-${b.id}`,
-        businessId: b.id,
-        kind: "alert",
-        title: `${b.name} ${live ? "is running" : "ran"} ${pct(Math.abs(m.vsExpected), 0)} below a normal ${todayName}`,
-        detail: `${live ? `Today is tracking ${usd(m.today)}` : `${todayName} closed at ${usd(m.today)}`} against a typical ${usd(
-          m.expectedToday,
-        )}. The gap is concentrated in the afternoon/evening window — the last few times this shape showed up, it lined up with a short-staffed shift. ${live ? "Worth a text before close." : "Worth a word with whoever ran that shift."}`,
-        priority: 90 + sev * 10,
-        metric: signedPct(m.vsExpected, 0),
-        metricUp: false,
-        action: { label: "Text manager", done: "Message drafted to your Havana manager ✓" },
-      });
-    } else if (m.vsExpected >= 0.1) {
-      out.push({
-        id: `win-${b.id}`,
-        businessId: b.id,
-        kind: "win",
-        title: `${b.name} ${live ? "is having" : "had"} a strong ${todayName}`,
-        detail: `Up ${pct(m.vsExpected, 0)} on its typical ${todayName} at ${usd(
-          m.today,
-        )} — one of its best ${todayName}s this month. ${live ? "Whatever you changed, keep doing it." : "Whatever drove it is worth repeating."}`,
-        priority: 64 + Math.min(8, m.vsExpected * 20),
-        metric: signedPct(m.vsExpected, 0),
-        metricUp: true,
-        action: { label: "See what's driving it", done: "Opening Subway breakdown ✓" },
-      });
-    }
+  // ── Anomalies: statistically off vs this business's OWN trend + weekday norm ──
+  // Real σ-scoring (anomalies.ts) replaces the old flat 12% threshold — only genuine
+  // outliers surface, and the copy states the actual σ instead of inventing a cause.
+  const anomalies = empireAnomalies(businesses, { lookback: 21, z: 1.5 });
+  const anomShown = new Set<string>();
+  for (const a of anomalies) {
+    if (anomShown.has(a.businessId)) continue; // one headline anomaly per business
+    if (Math.abs(a.vsExpected) < 0.08) continue; // skip trivial-dollar wobble
+    anomShown.add(a.businessId);
+    out.push(anomalyToInsight(a));
   }
 
   // ── Capital allocation: idle cash vs best return on capital ───────────────
@@ -149,4 +120,53 @@ export function buildInsights(
   }
 
   return out.sort((a, b) => b.priority - a.priority);
+}
+
+/** Turn a detected anomaly into a Brief card — honest about the σ, never inventing a cause. */
+function anomalyToInsight(a: Anomaly): Insight {
+  const wd = weekday(a.endDate, true);
+  const recent = daysAgo(a.endDate);
+  const down = a.kind === "dip" || a.kind === "streak-down";
+  const sigma = Math.abs(a.z).toFixed(1);
+  const mag = pct(Math.abs(a.vsExpected), 0);
+  const downAction = { label: "Draft a check-in", done: "Draft ready ✓" };
+  const upAction = { label: "See what's driving it", done: "Opening breakdown ✓" };
+
+  if (a.runLength >= 3) {
+    return {
+      id: `anom-${a.businessId}-${a.endDate}`,
+      businessId: a.businessId,
+      kind: down ? "alert" : "win",
+      title: `${a.businessName} has been ${down ? "soft" : "hot"} ${a.runLength} days running`,
+      detail: `Through ${wd} it's ${usd(a.actual)} vs ~${usd(a.expected)} expected (${mag} ${
+        down ? "below" : "above"
+      } its norm, ~${sigma}σ). One day is noise; ${a.runLength} in a row is a pattern ${
+        down ? "worth getting ahead of before it compounds" : "worth understanding so you can repeat it"
+      }.`,
+      priority: (down ? 86 : 60) + Math.min(10, Math.abs(a.z) * 3),
+      metric: signedPct(a.vsExpected, 0),
+      metricUp: !down,
+      action: down ? downAction : upAction,
+    };
+  }
+
+  const whenTitle = recent <= 0 ? "today" : recent === 1 ? "yesterday" : `on ${wd}`;
+  const whenDetail = recent <= 1 ? `${wd} came in` : `${wd} ${shortDate(a.endDate)} closed`;
+  return {
+    id: `anom-${a.businessId}-${a.date}`,
+    businessId: a.businessId,
+    kind: down ? "alert" : "win",
+    title: `${a.businessName} ${down ? "dipped" : "spiked"} ${mag} ${whenTitle}`,
+    detail: `${whenDetail} at ${usd(a.actual)} — about ${sigma}σ ${down ? "below" : "above"} its typical ${usd(
+      a.expected,
+    )}. That's outside ${a.businessName}'s normal day-to-day swing, so it's ${
+      down
+        ? "worth a look rather than writing off as a slow day"
+        : "a genuine outlier, not noise — worth knowing what worked"
+    }.`,
+    priority: (down ? 90 : 64) + Math.min(10, Math.abs(a.z) * 3),
+    metric: signedPct(a.vsExpected, 0),
+    metricUp: !down,
+    action: down ? downAction : upAction,
+  };
 }

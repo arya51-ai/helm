@@ -2,6 +2,7 @@ import type { Business, Insight } from "../types";
 import type { Metrics, EmpireSummary } from "./analytics";
 import { answerQuestion, type AskContext, type AskAnswer } from "./ask";
 import { summarizeForecast, paceToGoal } from "./forecast";
+import { empireAnomalies } from "./anomalies";
 import { goalFor } from "../data/goals";
 
 /**
@@ -88,6 +89,22 @@ export function buildAgentContext(ctx: AskContext, extra?: Record<string, unknow
       }
     }
   }
+  // Cross-empire "what changed" — the σ-scored outliers, so the brain reasons over real
+  // deviations (and can compare across businesses) rather than re-deriving them from raw series.
+  const anomalies = empireAnomalies(ctx.businesses, { lookback: 21, z: 1.5 })
+    .filter((a) => Math.abs(a.vsExpected) >= 0.08)
+    .slice(0, 6)
+    .map((a) => ({
+      business: a.businessName,
+      when: a.endDate,
+      kind: a.kind,
+      sigma: r2(a.z),
+      vsExpected: r2(a.vsExpected),
+      actual: r0(a.actual),
+      expected: r0(a.expected),
+      runLength: a.runLength,
+    }));
+
   const e = ctx.empire;
   return {
     businesses,
@@ -111,6 +128,7 @@ export function buildAgentContext(ctx: AskContext, extra?: Record<string, unknow
       priority: Math.round(i.priority),
     })),
     ...(Object.keys(goals).length ? { goals } : {}),
+    ...(anomalies.length ? { anomalies } : {}),
     ...(extra ?? {}),
   };
 }
