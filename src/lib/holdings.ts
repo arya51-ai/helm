@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import type { Business, Holding } from "../types";
 import { genEquityCurve } from "../data/rng";
 import { knownName } from "./quotes";
@@ -44,6 +43,7 @@ export interface ParsedHoldings {
 }
 
 export async function parseHoldingsFile(file: File): Promise<ParsedHoldings> {
+  const XLSX = await import("xlsx"); // lazy — SheetJS only loads when a file is actually parsed
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { cellDates: false });
   const ws = wb.Sheets[wb.SheetNames[0]];
