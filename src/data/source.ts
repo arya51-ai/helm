@@ -1,5 +1,5 @@
 import type { Business } from "../types";
-import { BUSINESSES as MOCK } from "./businesses";
+import { buildSampleBusinesses } from "./businesses";
 import { toDisplayCurrency } from "../lib/currency";
 import { readOverrides, clearOverride } from "./overrides";
 import { readRemoved, addRemoved, restoreRemoved } from "./removed";
@@ -111,6 +111,9 @@ export async function loadBusinesses(): Promise<{ businesses: Business[]; source
   const imported = readImported();
   const hasReal = fileBusinesses.length > 0 || imported.length > 0;
 
+  // Rebuild the sample each load so the demo series re-anchors to the current day
+  // (this is what makes the daily refresh actually roll "today" forward).
+  const MOCK = buildSampleBusinesses();
   // Merge by id, preserving order: sample → new-from-file → new-from-import
   const byId = new Map<string, Business>(MOCK.map((b) => [b.id, b]));
   const order = MOCK.map((b) => b.id);

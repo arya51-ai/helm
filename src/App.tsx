@@ -15,10 +15,11 @@ import { loadBusinesses, removeBusiness, type DataSource } from "./data/source";
 import { plaidBalances } from "./lib/plaid";
 import { toDisplayCurrency } from "./lib/currency";
 import { usd } from "./lib/format";
-import type { Business } from "./types";
+import type { Business, Insight } from "./types";
 import { metricsFor, empireSummary, type Metrics } from "./lib/analytics";
 import { buildInsights } from "./lib/insights";
 import { generateBrief } from "./lib/agent";
+import { useDailyRefresh } from "./lib/useDailyRefresh";
 import { BriefScreen, InsightCard } from "./components/BriefScreen";
 import { EmpireScreen } from "./components/EmpireScreen";
 import { BusinessesScreen } from "./components/BusinessesScreen";
@@ -29,6 +30,7 @@ import { InvestmentsSheet } from "./components/InvestmentsSheet";
 import { SettingsScreen } from "./components/SettingsScreen";
 import { Splash } from "./components/Splash";
 import { AskSheet } from "./components/AskSheet";
+import { ActionSheet } from "./components/ActionSheet";
 import { cx } from "./components/ui";
 
 type Tab = "brief" | "empire" | "businesses" | "settings";
@@ -47,6 +49,7 @@ export default function App() {
   const [investOpen, setInvestOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [askOpen, setAskOpen] = useState(false);
+  const [actionInsight, setActionInsight] = useState<Insight | null>(null);
   // Idle cash on hand — defaults to the sample figure, replaced by a real Plaid balance.
   const [idleCash, setIdleCash] = useState<number>(() => {
     try {
@@ -106,6 +109,10 @@ export default function App() {
     });
   }
 
+  // Roll data forward automatically at local midnight (and on focus after a date change),
+  // so "today" advances without reopening the app.
+  useDailyRefresh(reload);
+
   // Merge a single imported/synced business into state immediately (no flash).
   function mergeBusiness(b: Business) {
     setBusinesses((prev) => {
@@ -162,6 +169,7 @@ export default function App() {
               onSeeAll={() => setAllInsights(true)}
               onProfile={() => setTab("settings")}
               onAsk={() => setAskOpen(true)}
+              onDraft={setActionInsight}
             />
           )}
           {tab === "empire" && (
@@ -294,6 +302,15 @@ export default function App() {
               setAllInsights(false);
               setOpenBiz(id);
             }}
+            onDraft={setActionInsight}
+          />
+        )}
+        {actionInsight && (
+          <ActionSheet
+            insight={actionInsight}
+            ctx={{ businesses, metricsBy, empire, insights, idleCash }}
+            onClose={() => setActionInsight(null)}
+            onToast={showToast}
           />
         )}
 
@@ -317,11 +334,13 @@ function AllInsights({
   onClose,
   onToast,
   onOpenBusiness,
+  onDraft,
 }: {
   insights: ReturnType<typeof buildInsights>;
   onClose: () => void;
   onToast: (m: string) => void;
   onOpenBusiness: (id: string) => void;
+  onDraft: (insight: Insight) => void;
 }) {
   return (
     <div className="fixed inset-0 z-40 mx-auto flex max-w-[440px] flex-col bg-[#0a0b10]">
@@ -338,6 +357,7 @@ function AllInsights({
             insight={i}
             onAction={onToast}
             onOpen={i.businessId ? () => onOpenBusiness(i.businessId!) : undefined}
+            onDraft={i.action ? () => onDraft(i) : undefined}
           />
         ))}
       </div>

@@ -8,6 +8,7 @@ import {
   Check,
   Landmark,
   Sparkles,
+  Bell,
 } from "lucide-react";
 import { agentStatus } from "../lib/agent";
 import type { Business } from "../types";
@@ -44,7 +45,42 @@ export function SettingsScreen({
       alive = false;
     };
   }, []);
+  const [pushOn, setPushOn] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("helm:push:v1") === "1";
+    } catch {
+      return false;
+    }
+  });
   const removedCount = readRemoved().length;
+
+  async function enablePush() {
+    if (typeof Notification === "undefined") {
+      onToast("Notifications aren't supported here");
+      return;
+    }
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") {
+      onToast("Allow notifications to get your morning Brief");
+      return;
+    }
+    try {
+      localStorage.setItem("helm:push:v1", "1");
+    } catch {
+      /* ignore */
+    }
+    setPushOn(true);
+    // Demo: fire the morning Brief notification now so the owner sees the experience.
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      const body = "3 things need you today. Tap to open your brief.";
+      if (reg) reg.showNotification("Helm — good morning ☀️", { body, tag: "helm-brief" });
+      else new Notification("Helm — good morning ☀️", { body });
+    } catch {
+      /* ignore */
+    }
+    onToast("Morning Brief alerts on ✓");
+  }
   const live = dataSource === "real";
   const lag = asOf ? daysAgo(asOf) : 0;
   const freshness = !asOf
@@ -162,6 +198,23 @@ export function SettingsScreen({
               )}
             />
           </div>
+        </Card>
+      </section>
+
+      {/* Notifications */}
+      <section>
+        <SectionTitle>Notifications</SectionTitle>
+        <Card className="divide-y divide-white/[0.05]">
+          <Row
+            icon={Bell}
+            label="Morning Brief alert"
+            sub={
+              pushOn
+                ? "On — your top 3 each morning, after the night refresh"
+                : "Wake me each morning with what needs me"
+            }
+            onClick={enablePush}
+          />
         </Card>
       </section>
 
