@@ -39,6 +39,7 @@ export function SettingsScreen({
 }) {
   const [cad, setCad] = useState(String(RATES_TO_USD.CAD));
   const [fxTimestamp, setFxTimestamp] = useState(getFxTimestamp());
+  const [fxLoading, setFxLoading] = useState(false);
   const [brain, setBrain] = useState<{ available: boolean; askModel?: string } | null>(null);
   useEffect(() => {
     let alive = true;
@@ -105,14 +106,19 @@ export function SettingsScreen({
   }
 
   async function refreshFx() {
-    const ok = await updateFxRates();
-    if (ok) {
-      setFxTimestamp(getFxTimestamp());
-      setCad(String(RATES_TO_USD.CAD));
-      onReload();
-      onToast("Live rates fetched ✓");
-    } else {
-      onToast("Couldn't reach rate feed — using cached rates");
+    setFxLoading(true);
+    try {
+      const ok = await updateFxRates();
+      if (ok) {
+        setFxTimestamp(getFxTimestamp());
+        setCad(String(RATES_TO_USD.CAD));
+        onReload();
+        onToast("Live rates fetched ✓");
+      } else {
+        onToast("Couldn't reach rate feed — using cached rates");
+      }
+    } finally {
+      setFxLoading(false);
     }
   }
 
@@ -274,9 +280,11 @@ export function SettingsScreen({
               <span className="text-[11px] text-white/40">Updated {fxAge}</span>
               <button
                 onClick={refreshFx}
-                className="rounded-full bg-white/[0.1] px-3 py-1.5 text-[11px] font-semibold text-white/70 active:scale-95"
+                disabled={fxLoading}
+                className="flex items-center gap-1.5 rounded-full bg-white/[0.1] px-3 py-1.5 text-[11px] font-semibold text-white/70 active:scale-95 disabled:opacity-50"
               >
-                Fetch
+                {fxLoading && <RefreshCw size={12} className="animate-spin" />}
+                {!fxLoading && "Fetch"}
               </button>
             </div>
           </div>
