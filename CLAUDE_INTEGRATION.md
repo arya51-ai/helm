@@ -1,13 +1,24 @@
 # Helm — Claude Integration Status
 
-**Current date:** 2026-06-03  
-**Status:** Claude Sonnet 4.6 (ask/draft) + Opus 4.8 (brief) live and verified in `/api/agent` routes.
+**Current date:** 2026-06-03
+
+> ## ⚠️ PARKED — not funded yet (`*`)
+> The Claude integration is **built and verified in its offline/rule-engine fallback path**, but the
+> **live Claude brain is intentionally inactive**: there is **no `ANTHROPIC_API_KEY`** in `.env` because
+> Helm isn't funded yet. This is a deliberate hold, not a bug. **To switch it on when Helm is funded:**
+> add `ANTHROPIC_API_KEY=...` to `.env` and restart `npm run dev` — `/api/agent/status` flips to
+> `available:true` and every surface below lights up automatically (graceful-degradation pattern, same as
+> Plaid/Tally). Until then everything runs on the grounded rule engine with an "Offline" label. Nothing
+> in the app blocks on this.
+
+**Status:** wiring complete (Sonnet 4.6 ask/draft + Opus 4.8 brief); **offline fallback verified**; live
+path **parked pending funding**.
 
 > **Server-side:** `server/agent.mjs` exposes `/api/agent/{status,ask,brief,draft}` with graceful fallback to rule engine when `ANTHROPIC_API_KEY` is absent. Client feature-detects via `/status` endpoint.
 
 ---
 
-## ✅ LIVE — Claude Active & Verified
+## 🔌 WIRED — lights up the moment a key is added (offline fallback verified)
 
 ### 1. **Ask Helm** (interactive Q&A)
 - **File:** `src/components/AskSheet.tsx` + `src/lib/agent.ts:askAgent()`
@@ -117,6 +128,13 @@
 ---
 
 ## 📋 To-Do List: Make Claude Live Everywhere It Helps
+
+### Phase 0: Gather Real Business Data (Blocking)
+- [ ] **Meet with Dad:** Collect Subway + Havana capital deployed + net profit margins (see `DATA_COLLECTION_CHECKLIST.md`)
+- [ ] **Export Yahoo Finance CSV** from portfolio account
+- [ ] **Input data into Helm** via Business economics editor + portfolio upload
+- [ ] **Verify** Brief shows updated ROIC + capital insights
+- **Why blocking:** Current demo runs on sample/placeholder data. Real numbers unlock meaningful Ask Helm advice ("where should I put my cash?") and accurate capital allocation insights.
 
 ### Phase 1: Verify & Document (This Sprint)
 - [x] Audit existing Claude routes (`ask`, `brief`, `draft`) — all live & verified
