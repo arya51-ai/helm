@@ -14,6 +14,7 @@ import { BUSINESSES, EMPIRE } from "./data/businesses";
 import { loadBusinesses, removeBusiness, type DataSource } from "./data/source";
 import { plaidBalances } from "./lib/plaid";
 import { toDisplayCurrency } from "./lib/currency";
+import { updateFxRates } from "./lib/fxFeed";
 import { usd } from "./lib/format";
 import type { Business, Insight } from "./types";
 import { metricsFor, empireSummary, type Metrics } from "./lib/analytics";
@@ -68,6 +69,8 @@ export default function App() {
       setBusinesses(businesses);
       setDataSource(source);
     });
+    // Fetch live FX rates on app start; fails silently if unreachable
+    updateFxRates();
     return () => {
       alive = false;
     };
