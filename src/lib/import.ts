@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import type { DayPoint } from "../types";
 
 export interface ParsedImport {
@@ -34,9 +33,7 @@ function toISO(v: unknown): string | null {
   if (v == null || v === "") return null;
   if (v instanceof Date && !isNaN(v.getTime())) return iso(v);
   if (typeof v === "number") {
-    // Excel serial date
-    const parsed = XLSX.SSF?.parse_date_code?.(v);
-    if (parsed && parsed.y) return `${parsed.y}-${pad(parsed.m)}-${pad(parsed.d)}`;
+    // Excel serial date → epoch math (keeps xlsx out of the module scope so it lazy-loads).
     const d = new Date(Math.round((v - 25569) * 86400 * 1000));
     return isNaN(d.getTime()) ? null : iso(d);
   }
@@ -64,6 +61,7 @@ function pickColumn(headers: string[], keys: string[]): number {
 
 /** Parse a CSV/XLSX/XLS sales export into a normalized daily series. */
 export async function parseSalesFile(file: File): Promise<ParsedImport> {
+  const XLSX = await import("xlsx"); // lazy — SheetJS only loads when a file is actually parsed
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
