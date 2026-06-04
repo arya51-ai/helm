@@ -31,10 +31,13 @@ export function InsightCard({
   insight,
   onAction,
   onOpen,
+  onDraft,
 }: {
   insight: Insight;
   onAction: (msg: string) => void;
   onOpen?: () => void;
+  /** When provided, the action opens the agentic draft/confirm sheet instead of an instant toast. */
+  onDraft?: () => void;
 }) {
   const s = KIND_STYLE[insight.kind];
   const Icon = s.icon;
@@ -70,6 +73,10 @@ export function InsightCard({
             <div className="mt-3 flex items-center gap-2">
               <button
                 onClick={() => {
+                  if (onDraft) {
+                    onDraft();
+                    return;
+                  }
                   setDone(true);
                   onAction(insight.action!.done);
                 }}
@@ -80,7 +87,7 @@ export function InsightCard({
                     : "bg-white text-black active:scale-95",
                 )}
               >
-                {done ? <Check size={15} strokeWidth={3} /> : null}
+                {done ? <Check size={15} strokeWidth={3} /> : onDraft ? <Sparkles size={14} className="text-violet-500" /> : null}
                 {done ? "Done" : insight.action.label}
               </button>
               {onOpen && (
@@ -111,6 +118,7 @@ export function BriefScreen({
   onSeeAll,
   onProfile,
   onAsk,
+  onDraft,
 }: {
   businesses: Business[];
   metricsBy: Record<string, Metrics>;
@@ -124,6 +132,7 @@ export function BriefScreen({
   onSeeAll: () => void;
   onProfile: () => void;
   onAsk: () => void;
+  onDraft: (insight: Insight) => void;
 }) {
   const today = new Date();
   const hour = today.getHours();
@@ -245,6 +254,7 @@ export function BriefScreen({
               insight={i}
               onAction={onToast}
               onOpen={i.businessId ? () => onOpenBusiness(i.businessId!) : undefined}
+              onDraft={i.action ? () => onDraft(i) : undefined}
             />
           ))}
         </div>

@@ -1,12 +1,6 @@
 import type { Business, DayPoint, Holding } from "../types";
 import { genSeries, genEquityCurve } from "./rng";
 
-/** "Today" — anchored to local midnight so the series ends on the current day. */
-const TODAY = (() => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-})();
 const DAYS = 90;
 
 export const EMPIRE = {
@@ -14,6 +8,14 @@ export const EMPIRE = {
   /** Uninvested cash sitting in business checking, earning ~nothing */
   idleCash: 42_000,
 };
+
+/** Local midnight "today" — the demo series ends here. Recomputed on every build so a
+ *  reload (or the daily refresh) rolls the data forward to the current calendar day. */
+function localMidnight(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
 
 /**
  * Engineer the most recent day to a target multiple of its "expected" value
@@ -36,36 +38,8 @@ function engineerToday(series: DayPoint[], factor: number): void {
   };
 }
 
-// ─── Subway — Española, ON ────────────────────────────────────────────────
-const subwaySeries = genSeries({
-  seed: 1207,
-  days: DAYS,
-  baseRevenue: 1650,
-  avgTicket: 12.75,
-  trend: 0.16,
-  noise: 0.1,
-  // Sun..Sat — lunch-driven, strong Fri/Sat, slow Sun
-  dow: [0.82, 1.0, 1.0, 1.02, 1.06, 1.16, 1.12],
-  endDate: TODAY,
-});
-engineerToday(subwaySeries, 1.12); // a strong day — a "win"
-
-// ─── Havana Smoke Shop — Columbus, OH ─────────────────────────────────────
-const havanaSeries = genSeries({
-  seed: 8843,
-  days: DAYS,
-  baseRevenue: 1300,
-  avgTicket: 15.5,
-  trend: 0.07,
-  noise: 0.14,
-  // Sun..Sat — evening/weekend skew
-  dow: [0.95, 0.88, 0.9, 0.96, 1.06, 1.22, 1.25],
-  endDate: TODAY,
-});
-engineerToday(havanaSeries, 0.78); // down ~22% — the alert that needs the owner
-
-// ─── Investment Portfolio ─────────────────────────────────────────────────
-const holdings: Holding[] = [
+// ─── Investment Portfolio (positions are fixed; the equity curve re-anchors) ──────
+const HOLDINGS: Holding[] = [
   { ticker: "VOO", name: "Vanguard S&P 500", shares: 80, price: 545.0, dayChangePct: 0.007, costBasis: 470 },
   { ticker: "AAPL", name: "Apple", shares: 120, price: 212.4, dayChangePct: 0.009, costBasis: 150 },
   { ticker: "MSFT", name: "Microsoft", shares: 45, price: 470.1, dayChangePct: 0.006, costBasis: 360 },
@@ -73,47 +47,86 @@ const holdings: Holding[] = [
   { ticker: "TSLA", name: "Tesla", shares: 50, price: 295.0, dayChangePct: -0.014, costBasis: 240 },
   { ticker: "AMZN", name: "Amazon", shares: 40, price: 215.0, dayChangePct: 0.011, costBasis: 165 },
 ];
-const portfolioValue = holdings.reduce((a, h) => a + h.shares * h.price, 0);
-const portfolioCost = holdings.reduce((a, h) => a + h.shares * h.costBasis, 0);
-const portfolioSeries = genEquityCurve(2026, DAYS, portfolioValue, 0.011, 0.026, TODAY);
+const PORTFOLIO_VALUE = HOLDINGS.reduce((a, h) => a + h.shares * h.price, 0);
+const PORTFOLIO_COST = HOLDINGS.reduce((a, h) => a + h.shares * h.costBasis, 0);
 
-export const BUSINESSES: Business[] = [
-  {
-    id: "subway-espanola",
-    name: "Subway",
-    shortName: "Subway",
-    type: "restaurant",
-    currency: "CAD",
-    location: "Española, ON",
-    category: "Sandwich franchise",
-    accent: "#2bb673",
-    series: subwaySeries,
-    capitalDeployed: 250_000,
-    netMargin: 0.085,
-  },
-  {
-    id: "havana-columbus",
-    name: "Havana Smoke Shop",
-    shortName: "Havana",
-    type: "retail",
-    location: "Columbus, OH",
-    category: "Tobacco & vape",
-    accent: "#e0913a",
-    series: havanaSeries,
-    capitalDeployed: 185_000,
-    netMargin: 0.135,
-  },
-  {
-    id: "portfolio",
-    name: "Investment Portfolio",
-    shortName: "Portfolio",
-    type: "portfolio",
-    location: "Brokerage",
-    category: "Stocks & ETFs",
-    accent: "#7c6cf5",
-    series: portfolioSeries,
-    capitalDeployed: Math.round(portfolioCost),
-    annualReturn: 0.092,
-    holdings,
-  },
-];
+/**
+ * Build the sample businesses with the series ending on `asOf` (default: today at local
+ * midnight). Called fresh by `loadBusinesses()` on every load, so the demo data rolls
+ * forward to the current day instead of being frozen at first-import time.
+ */
+export function buildSampleBusinesses(asOf: Date = localMidnight()): Business[] {
+  // ─── Subway — Española, ON ──────────────────────────────────────────────
+  const subwaySeries = genSeries({
+    seed: 1207,
+    days: DAYS,
+    baseRevenue: 1650,
+    avgTicket: 12.75,
+    trend: 0.16,
+    noise: 0.1,
+    // Sun..Sat — lunch-driven, strong Fri/Sat, slow Sun
+    dow: [0.82, 1.0, 1.0, 1.02, 1.06, 1.16, 1.12],
+    endDate: asOf,
+  });
+  engineerToday(subwaySeries, 1.12); // a strong day — a "win"
+
+  // ─── Havana Smoke Shop — Columbus, OH ───────────────────────────────────
+  const havanaSeries = genSeries({
+    seed: 8843,
+    days: DAYS,
+    baseRevenue: 1300,
+    avgTicket: 15.5,
+    trend: 0.07,
+    noise: 0.14,
+    // Sun..Sat — evening/weekend skew
+    dow: [0.95, 0.88, 0.9, 0.96, 1.06, 1.22, 1.25],
+    endDate: asOf,
+  });
+  engineerToday(havanaSeries, 0.78); // down ~22% — the alert that needs the owner
+
+  const portfolioSeries = genEquityCurve(2026, DAYS, PORTFOLIO_VALUE, 0.011, 0.026, asOf);
+
+  return [
+    {
+      id: "subway-espanola",
+      name: "Subway",
+      shortName: "Subway",
+      type: "restaurant",
+      currency: "CAD",
+      location: "Española, ON",
+      category: "Sandwich franchise",
+      accent: "#2bb673",
+      series: subwaySeries,
+      capitalDeployed: 250_000,
+      netMargin: 0.085,
+    },
+    {
+      id: "havana-columbus",
+      name: "Havana Smoke Shop",
+      shortName: "Havana",
+      type: "retail",
+      location: "Columbus, OH",
+      category: "Tobacco & vape",
+      accent: "#e0913a",
+      series: havanaSeries,
+      capitalDeployed: 185_000,
+      netMargin: 0.135,
+    },
+    {
+      id: "portfolio",
+      name: "Investment Portfolio",
+      shortName: "Portfolio",
+      type: "portfolio",
+      location: "Brokerage",
+      category: "Stocks & ETFs",
+      accent: "#7c6cf5",
+      series: portfolioSeries,
+      capitalDeployed: Math.round(PORTFOLIO_COST),
+      annualReturn: 0.092,
+      holdings: HOLDINGS,
+    },
+  ];
+}
+
+/** One-time snapshot for the very first synchronous render (anchored at app start). */
+export const BUSINESSES: Business[] = buildSampleBusinesses();
