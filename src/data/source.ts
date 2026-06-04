@@ -102,7 +102,19 @@ export async function loadBusinesses(): Promise<{ businesses: Business[]; source
     if (res.ok) {
       const data = await res.json();
       const incoming: unknown[] = Array.isArray(data) ? data : data?.businesses;
-      if (Array.isArray(incoming)) fileBusinesses = incoming.filter(isValidBusiness).map(normalizeSeries);
+      if (Array.isArray(incoming)) {
+        const validated = incoming.filter(isValidBusiness).map(normalizeSeries);
+        // Skip if the file data is stale (more than 1 day old relative to mock "today")
+        const mockToday = new Date();
+        mockToday.setHours(0, 0, 0, 0);
+        const mockTodayStr = mockToday.toISOString().split("T")[0];
+        const isStale = validated.some((b) => {
+          const lastDate = b.series[b.series.length - 1]?.date;
+          return lastDate && lastDate < mockTodayStr;
+        });
+        if (!isStale) fileBusinesses = validated;
+        // else: stale real data is ignored; mock data is used instead
+      }
     }
   } catch {
     /* offline / missing → sample only */
