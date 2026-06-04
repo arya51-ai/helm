@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, MapPin, Coins, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { ChevronLeft, ChevronRight, MapPin, Coins, RefreshCw, SlidersHorizontal, TrendingUp, TrendingDown } from "lucide-react";
 import type { Business, Currency } from "../types";
 import type { Metrics } from "../lib/analytics";
 import { usd, usdCompact, money, pct, signedPct, signedUsd, daysAgo, weekday, shortDate, currencySymbol } from "../lib/format";
@@ -9,6 +9,7 @@ import { AreaTrend, DayBars, HBars, DowBars, CalendarHeatmap, TrendRibbon, Forec
 import { benchmarkFor } from "../lib/benchmark";
 import { expectedFor, dowAverages, rangeBreakdown } from "../lib/breakdowns";
 import { forecastDaily, summarizeForecast, paceToGoal } from "../lib/forecast";
+import { anomalyMarks, detectAnomalies } from "../lib/anomalies";
 import { goalFor, setGoal } from "../data/goals";
 import { DayDetail } from "./DayDetail";
 
@@ -73,6 +74,11 @@ export function BusinessDetail({
     const i = business.series.findIndex((p) => p.date === date);
     if (i >= 0) setDayIdx(i);
   };
+  // Anomalies: outlier-day calendar dots + a "what changed" feed (operating businesses only).
+  const marks = isPort ? {} : anomalyMarks(business);
+  const anomalies = isPort
+    ? []
+    : detectAnomalies(business, { lookback: 21, z: 1.5 }).filter((a) => Math.abs(a.vsExpected) >= 0.08);
 
   // ── Forecast + pace-to-goal (operating businesses) ──
   const toUsd = (v: number) => (cur === DISPLAY_CURRENCY ? v : v * RATES_TO_USD[cur as Currency]);
@@ -222,6 +228,7 @@ export function BusinessDetail({
                 selected={selDate}
                 onSelect={pickDay}
                 fmt={(v) => money(v, cur)}
+                marks={marks}
               />
             </div>
           </Card>
@@ -338,6 +345,51 @@ export function BusinessDetail({
                   </button>
                 )}
               </div>
+            </Card>
+          </DetailSection>
+        )}
+
+        {/* ── What changed: anomalies vs the business's own trend+weekday norm ── */}
+        {!isPort && anomalies.length > 0 && (
+          <DetailSection title="What changed" hint="vs its own norm">
+            <Card className="divide-y divide-white/[0.05]">
+              {anomalies.slice(0, 4).map((a) => {
+                const down = a.kind === "dip" || a.kind === "streak-down";
+                const streak = a.runLength >= 3;
+                return (
+                  <button
+                    key={`${a.date}-${a.endDate}`}
+                    onClick={() => pickDay(a.endDate)}
+                    className="flex w-full items-center gap-3 p-3.5 text-left active:bg-white/[0.02]"
+                  >
+                    <span
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-lg"
+                      style={{ background: down ? "#ef444422" : "#22c55e22" }}
+                    >
+                      {down ? (
+                        <TrendingDown size={15} className="text-rose-400" />
+                      ) : (
+                        <TrendingUp size={15} className="text-emerald-400" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13.5px] font-semibold text-white">
+                        {streak ? `${a.runLength} ${down ? "soft" : "strong"} days running` : `${weekday(a.endDate)} ${down ? "dip" : "spike"}`}
+                      </p>
+                      <p className="text-[11px] text-white/40">
+                        {Math.abs(a.z).toFixed(1)}σ {down ? "below" : "above"} norm · {shortDate(a.endDate)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={cx("text-[13.5px] font-semibold tabular-nums", down ? "text-rose-300" : "text-emerald-300")}>
+                        {signedPct(a.vsExpected, 0)}
+                      </p>
+                      <p className="text-[11px] text-white/40">{m(Math.abs(a.delta))}</p>
+                    </div>
+                    <ChevronRight size={16} className="text-white/25" />
+                  </button>
+                );
+              })}
             </Card>
           </DetailSection>
         )}

@@ -31,10 +31,23 @@ function weekdayFactors(series: DayPoint[], mean: number): number[] {
   return sums.map((x) => (x.c && mean ? x.s / x.c / mean : 1));
 }
 
-/** Forecast the next `horizon` days. Empty if the history is too short to be meaningful. */
-export function forecastDaily(series: DayPoint[], horizon: number): ForecastPoint[] {
+/**
+ * The fitted trend + weekday-seasonality model for a series. `trendAt(k)` is the
+ * deseasonalized level at window-index k (k = w-1 is the last actual; k ≥ w projects
+ * forward). `sigmaDe` is the residual σ in deseasonalized units. Shared by the forecast
+ * (projects forward) and the anomaly detector (scores each recent actual against it).
+ */
+export interface SeriesFit {
+  n: number;
+  w: number;
+  factor: number[];
+  sigmaDe: number;
+  trendAt: (k: number) => number;
+}
+
+export function buildFit(series: DayPoint[]): SeriesFit | null {
   const n = series.length;
-  if (n < 8 || horizon < 1) return [];
+  if (n < 8) return null;
   const mean = series.reduce((a, p) => a + p.revenue, 0) / n;
   const factor = weekdayFactors(series, mean);
   const deseason = series.map((p) => p.revenue / (factor[dow(p.date)] || 1));
@@ -58,15 +71,22 @@ export function forecastDaily(series: DayPoint[], horizon: number): ForecastPoin
   for (let i = 0; i < w; i++) ss += (recent[i] - trendAt(i)) ** 2;
   const sigmaDe = Math.sqrt(ss / Math.max(1, w - 2));
 
-  const last = series[n - 1].date;
+  return { n, w, factor, sigmaDe, trendAt };
+}
+
+/** Forecast the next `horizon` days. Empty if the history is too short to be meaningful. */
+export function forecastDaily(series: DayPoint[], horizon: number): ForecastPoint[] {
+  const fit = buildFit(series);
+  if (!fit || horizon < 1) return [];
+  const last = series[series.length - 1].date;
   const out: ForecastPoint[] = [];
   for (let h = 1; h <= horizon; h++) {
     const d = new Date(`${last}T00:00:00`);
     d.setDate(d.getDate() + h);
     const ds = isoDate(d);
-    const f = factor[dow(ds)] || 1;
-    const meanH = Math.max(0, trendAt(w - 1 + h) * f);
-    const sig = sigmaDe * f * Math.sqrt(1 + h / 14); // band widens into the future
+    const f = fit.factor[dow(ds)] || 1;
+    const meanH = Math.max(0, fit.trendAt(fit.w - 1 + h) * f);
+    const sig = fit.sigmaDe * f * Math.sqrt(1 + h / 14); // band widens into the future
     out.push({
       date: ds,
       mean: Math.round(meanH),
