@@ -1,0 +1,19 @@
+# Defense-in-depth for `vercel` CLI deploys (which respect THIS file, not .gitignore).
+# Keeps secrets + real financials out of any deploy even if pushed from a local dir.
+.env
+.env.local
+.env.*.local
+server/.tokens.json
+public/data.json
+
+# Internal docs — not for the shipped app
+HANDOFF.md
+COWORK_SCRAPE_PROMPT.md
+MARKET_RESEARCH.md
+PRODUCT_PLAN.md
+FUNDING_REQUIREMENTS.md
+DATA_COLLECTION_CHECKLIST.md
+
+node_modules
+.DS_Store
+*.log
