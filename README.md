@@ -20,7 +20,7 @@ owner lives in five dashboards and a spreadsheet.
 
 **Helm** puts every revenue source on one screen, normalizes them to the same yardstick
 (return on capital, contribution to net worth), and every morning tells you the one or two
-things worth your attention — and what to do about them. Think less "BI dashboard," more
+things worth your attention — and what to do about them. Think less "AI dashboard," more
 *chief operating officer in your pocket.*
 
 ## What it does
