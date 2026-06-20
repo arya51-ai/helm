@@ -3,7 +3,20 @@ import { ChevronLeft, Send, Sparkles } from "lucide-react";
 import type { Insight } from "../types";
 import { draftAction, type AgentSource } from "../lib/agent";
 import type { AskContext } from "../lib/ask";
+import { add as addAction, type ActionKind } from "../data/actions";
 import { HelmMark } from "./Brand";
+
+/**
+ * Bucket an insight into the kind of artifact it produces, so the tracked action reads
+ * cleanly in the open-loops list and we can pick the right native composer.
+ */
+function actionKindFor(insight: Insight): ActionKind {
+  if (insight.kind === "capital") return "capital";
+  const label = `${insight.action?.label ?? ""} ${insight.title}`.toLowerCase();
+  if (/\b(reorder|order|restock|stock|inventory|par)\b/.test(label)) return "reorder";
+  if (/\b(text|message|email|call|tell|ask|remind|send)\b/.test(label)) return "message";
+  return "task";
+}
 
 /**
  * Agentic action: Claude drafts the artifact for an actionable insight (the text to the
@@ -44,18 +57,51 @@ export function ActionSheet({
   }, []);
 
   const send = () => {
-    onToast(insight.action?.done ?? "Done ✓");
+    // Offline (no Claude draft): nothing to send — keep the simulated "mark done".
+    if (source !== "claude") {
+      onToast(insight.action?.done ?? "Done ✓");
+      onClose();
+      return;
+    }
+
+    // Real send: record the drafted artifact as a tracked, sent action so the brief
+    // can close the loop later. Helm still never sends for you — we just log it and,
+    // where there's a human on the other end, open the native composer prefilled.
+    const kind = actionKindFor(insight);
+    addAction({
+      businessId: insight.businessId,
+      insightTitle: insight.title,
+      draftText: text,
+      kind,
+      status: "sent",
+    });
+
+    if (kind === "message" || kind === "reorder") {
+      const body = encodeURIComponent(text);
+      // No recipient on file in the prototype — open unaddressed so the owner picks who.
+      const href =
+        kind === "reorder"
+          ? `mailto:?subject=${encodeURIComponent(insight.action?.label ?? "Reorder")}&body=${body}`
+          : `sms:?&body=${body}`;
+      try {
+        window.location.href = href;
+      } catch {
+        /* composer unavailable (desktop / blocked) — the action is still tracked */
+      }
+    }
+
+    onToast("Sent · tracking until it's done");
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-[70] mx-auto flex max-w-[440px] flex-col bg-[#0a0b10]">
+    <div className="fixed inset-0 z-[70] mx-auto flex max-w-[440px] flex-col bg-[#0a263e]">
       <div className="flex items-center gap-3 px-4 pb-3 pt-5">
         <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white/[0.06] active:scale-90">
           <ChevronLeft size={20} className="text-white" />
         </button>
         <div className="flex items-center gap-2">
-          <HelmMark size={18} className="text-violet-300" />
+          <HelmMark size={18} className="text-brass" />
           <h1 className="text-[16px] font-bold text-white">{insight.action?.label ?? "Draft"}</h1>
         </div>
       </div>
@@ -65,24 +111,24 @@ export function ActionSheet({
 
         {loading ? (
           <div className="flex items-center gap-2 rounded-2xl border border-white/[0.07] bg-white/[0.03] px-4 py-5 text-[13px] text-white/55">
-            <Sparkles size={15} className="animate-pulse text-violet-300" />
+            <Sparkles size={15} className="animate-pulse text-brass" />
             Drafting with the real numbers…
           </div>
         ) : source === "claude" ? (
           <div>
             <div className="mb-1.5 flex items-center gap-1.5 px-1">
-              <Sparkles size={13} className="text-violet-300" />
-              <span className="text-[11px] font-bold uppercase tracking-wide text-violet-300">Claude drafted · edit before you send</span>
+              <Sparkles size={13} className="text-brass" />
+              <span className="text-[11px] font-bold uppercase tracking-wide text-brass">Claude drafted · edit before you send</span>
             </div>
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={Math.min(16, Math.max(5, text.split("\n").length + 2))}
-              className="w-full resize-none rounded-2xl border border-white/[0.09] bg-white/[0.04] p-3.5 text-[13.5px] leading-relaxed text-white/90 outline-none focus:border-violet-400/40"
+              className="w-full resize-none rounded-2xl border border-white/[0.09] bg-white/[0.04] p-3.5 text-[13.5px] leading-relaxed text-white/90 outline-none focus:border-brass/40"
             />
           </div>
         ) : (
-          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.06] p-4 text-[13px] leading-relaxed text-white/70">
+          <div className="rounded-2xl border border-brass/20 bg-brass/[0.06] p-4 text-[13px] leading-relaxed text-white/70">
             Helm drafts this with Claude — it's offline right now. Add an Anthropic API key in
             Settings to have it write the message for you. You can still mark the action done.
           </div>

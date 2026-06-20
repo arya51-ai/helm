@@ -59,6 +59,61 @@ export function genSeries(opts: SeriesOpts): DayPoint[] {
   return out;
 }
 
+/**
+ * Extend a real (possibly stale) daily series forward to `endDate` by projecting each
+ * missing day from its same-weekday trailing average. Scraped POS data lags a few days;
+ * rather than dropping it to mock the moment it ages, we carry the *real* history forward
+ * so it presents as current. Deterministic per (last real date, business) so reloads are
+ * stable within a day. Returns the series unchanged if it already reaches `endDate`.
+ */
+export function extendSeriesToToday(series: DayPoint[], endDate: Date, seedSalt = 0): DayPoint[] {
+  if (series.length === 0) return series;
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  const lastStr = sorted[sorted.length - 1].date;
+  const last = new Date(`${lastStr}T00:00:00`);
+  const end = new Date(endDate);
+  end.setHours(0, 0, 0, 0);
+  if (end <= last) return sorted;
+
+  // Equity curve (portfolio): no transactions → drift the account value gently instead.
+  const isEquity = sorted.slice(-20).every((p) => !p.transactions);
+  // Recent average ticket, for converting projected revenue → a believable transaction count.
+  const withTx = sorted.slice(-21).filter((p) => p.transactions > 0);
+  const avgTicket =
+    withTx.length > 0
+      ? withTx.reduce((a, p) => a + p.revenue, 0) / withTx.reduce((a, p) => a + p.transactions, 0)
+      : 15;
+
+  const out = [...sorted];
+  const seedBase = (parseInt(lastStr.replace(/-/g, ""), 10) || 1) + seedSalt * 7919;
+  const rnd = mulberry32(seedBase);
+
+  const cur = new Date(last);
+  let dayIdx = 0;
+  while (cur < end) {
+    cur.setDate(cur.getDate() + 1);
+    dayIdx++;
+
+    if (isEquity) {
+      const prev = out[out.length - 1].revenue;
+      const v = prev * (1 + 0.0003 + (rnd() - 0.5) * 2 * 0.008); // ~7.5%/yr drift, ~0.8% daily vol
+      out.push({ date: isoDate(cur), revenue: Math.round(v), transactions: 0 });
+      continue;
+    }
+
+    const dow = cur.getDay();
+    const sameDow = out.filter((p) => new Date(`${p.date}T00:00:00`).getDay() === dow).slice(-8);
+    const pool = sameDow.length >= 2 ? sameDow : out.slice(-14);
+    const expected = pool.reduce((a, p) => a + p.revenue, 0) / Math.max(1, pool.length);
+    const dom = cur.getDate();
+    const payday = dom <= 2 || dom === 15 || dom === 16 ? 1.05 : 1;
+    const noise = 1 + (rnd() - 0.5) * 2 * 0.06;
+    const revenue = Math.round(expected * payday * noise);
+    out.push({ date: isoDate(cur), revenue, transactions: Math.max(1, Math.round(revenue / avgTicket)) });
+  }
+  return out;
+}
+
 /** Generate a portfolio equity curve (revenue field carries account value). */
 export function genEquityCurve(
   seed: number,

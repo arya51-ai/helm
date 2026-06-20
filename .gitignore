@@ -22,7 +22,17 @@ PRODUCT_PLAN.md
 FUNDING_REQUIREMENTS.md
 DATA_COLLECTION_CHECKLIST.md
 
+# Strategy / "our edge" — keep private (business plan, leverage playbook,
+# demo targets + pricing, data-moat strategy). Never push to the public repo.
+HANDOFF_HELM_BUSINESS_PLAN.md
+docs/DEMO_ROADMAP.md
+docs/HORMOZI_LEVERAGE_CASE_STUDY.md
+docs/DATA_CONNECTION_STRATEGY.md
+
 # Misc
 .DS_Store
 *.log
 *.local
+
+# Local dev launcher (not for the repo)
+Start Helm.command

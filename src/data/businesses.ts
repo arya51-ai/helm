@@ -97,8 +97,9 @@ export function buildSampleBusinesses(asOf: Date = localMidnight()): Business[] 
       category: "Sandwich franchise",
       accent: "#2bb673",
       series: subwaySeries,
-      capitalDeployed: 250_000,
-      netMargin: 0.085,
+      // $450k CAD purchase (2011) + $150k CAD buildout/renovations.
+      capitalDeployed: 600_000,
+      netMargin: 0.18,
     },
     {
       id: "riverside-columbus",
@@ -109,8 +110,9 @@ export function buildSampleBusinesses(asOf: Date = localMidnight()): Business[] 
       category: "Tobacco & vape",
       accent: "#e0913a",
       series: riversideSeries,
-      capitalDeployed: 185_000,
-      netMargin: 0.135,
+      // $475k USD acquisition (2025).
+      capitalDeployed: 475_000,
+      netMargin: 0.40,
     },
     {
       id: "portfolio",
@@ -119,7 +121,7 @@ export function buildSampleBusinesses(asOf: Date = localMidnight()): Business[] 
       type: "portfolio",
       location: "Brokerage",
       category: "Stocks & ETFs",
-      accent: "#7c6cf5",
+      accent: "#6fa8dc",
       series: portfolioSeries,
       capitalDeployed: Math.round(PORTFOLIO_COST),
       annualReturn: 0.092,

@@ -7,24 +7,28 @@ import {
   Info,
   ChevronRight,
   Check,
+  CircleDashed,
 } from "lucide-react";
+import { Building2, ChevronRight as ChevronRightIcon } from "lucide-react";
 import type { Business, Insight, InsightKind } from "../types";
 import type { Metrics, EmpireSummary } from "../lib/analytics";
 import type { DataSource } from "../data/source";
-import { usd, usdCompact, longDate, daysAgo, weekday, shortDate } from "../lib/format";
+import { hotelPortfolioMetrics } from "../lib/hotelAnalytics";
+import { usd, usdCompact, pct, longDate, daysAgo, weekday, shortDate } from "../lib/format";
+import { list as listActions, setStatus as setActionStatus, type TrackedAction } from "../data/actions";
 import { Card, Delta, Sparkline, SectionTitle, cx } from "./ui";
-import { AreaTrend } from "./charts";
+import { TrendRibbon } from "./charts";
 import { HelmLockup, HelmMark } from "./Brand";
 
 const KIND_STYLE: Record<
   InsightKind,
   { icon: typeof Info; ring: string; chip: string; text: string }
 > = {
-  alert: { icon: AlertTriangle, ring: "bg-rose-400/12", chip: "text-rose-400", text: "Needs you" },
-  opportunity: { icon: Lightbulb, ring: "bg-amber-400/12", chip: "text-amber-400", text: "Opportunity" },
-  win: { icon: Sparkles, ring: "bg-emerald-400/12", chip: "text-emerald-400", text: "Win" },
-  capital: { icon: Landmark, ring: "bg-violet-400/12", chip: "text-violet-300", text: "Capital" },
-  info: { icon: Info, ring: "bg-sky-400/12", chip: "text-sky-300", text: "FYI" },
+  alert: { icon: AlertTriangle, ring: "bg-down/12", chip: "text-down", text: "Needs you" },
+  opportunity: { icon: Lightbulb, ring: "bg-brass/12", chip: "text-brass", text: "Opportunity" },
+  win: { icon: Sparkles, ring: "bg-up/12", chip: "text-up", text: "Win" },
+  capital: { icon: Landmark, ring: "bg-brass/12", chip: "text-brass", text: "Capital" },
+  info: { icon: Info, ring: "bg-info/12", chip: "text-info", text: "FYI" },
 };
 
 export function InsightCard({
@@ -57,7 +61,7 @@ export function InsightCard({
               <span
                 className={cx(
                   "rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums",
-                  insight.metricUp ? "bg-emerald-400/10 text-emerald-400" : "bg-rose-400/10 text-rose-400",
+                  insight.metricUp ? "bg-up/10 text-up" : "bg-down/10 text-down",
                 )}
               >
                 {insight.metric}
@@ -83,11 +87,11 @@ export function InsightCard({
                 className={cx(
                   "inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-semibold transition",
                   done
-                    ? "bg-emerald-400/15 text-emerald-400"
-                    : "bg-white text-black active:scale-95",
+                    ? "bg-up/15 text-up"
+                    : "bg-brass text-[#071e33] active:scale-95",
                 )}
               >
-                {done ? <Check size={15} strokeWidth={3} /> : onDraft ? <Sparkles size={14} className="text-violet-500" /> : null}
+                {done ? <Check size={15} strokeWidth={3} /> : onDraft ? <Sparkles size={14} className="text-brass" /> : null}
                 {done ? "Done" : insight.action.label}
               </button>
               {onOpen && (
@@ -106,6 +110,79 @@ export function InsightCard({
   );
 }
 
+const LOOP_KIND_LABEL: Record<TrackedAction["kind"], string> = {
+  message: "Message",
+  reorder: "Reorder",
+  capital: "Capital",
+  task: "Task",
+};
+
+/**
+ * Open loops — the actions the owner has drafted/sent but not closed. This is what makes
+ * Helm feel like a COO rather than a dashboard: it remembers what's outstanding and lets
+ * you tap it done. Reads straight from the tracked-actions store; on done we drop it from
+ * the live list (the record stays, just no longer "open").
+ */
+function OpenLoops({ businesses }: { businesses: Business[] }) {
+  const [actions, setActions] = useState<TrackedAction[]>(() =>
+    listActions()
+      .filter((a) => a.status !== "done")
+      .sort((a, b) => (b.sentAt ?? b.createdAt) - (a.sentAt ?? a.createdAt)),
+  );
+  if (actions.length === 0) return null;
+
+  const nameFor = (id?: string) => {
+    if (!id) return null;
+    const b = businesses.find((x) => x.id === id);
+    return b ? b.shortName ?? b.name : null;
+  };
+
+  const markDone = (id: string) => {
+    setActionStatus(id, "done");
+    setActions((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  return (
+    <section>
+      <SectionTitle right={<span className="text-[12px] text-white/40">{actions.length} open</span>}>
+        Open loops
+      </SectionTitle>
+      <p className="mb-3 px-1 text-[13px] text-white/45">
+        What you've put in motion — tap to close it out.
+      </p>
+      <div className="space-y-2.5">
+        {actions.map((a) => {
+          const biz = nameFor(a.businessId);
+          return (
+            <Card key={a.id} className="flex items-center gap-3 p-3.5">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl bg-brass/12 text-brass">
+                <CircleDashed size={17} strokeWidth={2.2} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-semibold text-white">
+                  {a.insightTitle ?? a.draftText}
+                </p>
+                <p className="truncate text-[12px] text-white/40">
+                  {LOOP_KIND_LABEL[a.kind]}
+                  {biz ? ` · ${biz}` : ""}
+                  {a.status === "sent" ? " · sent" : " · drafted"}
+                </p>
+              </div>
+              <button
+                onClick={() => markDone(a.id)}
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-up/15 px-3 py-1.5 text-[12px] font-semibold text-up active:scale-95"
+              >
+                <Check size={13} strokeWidth={3} />
+                Done
+              </button>
+            </Card>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function BriefScreen({
   businesses,
   metricsBy,
@@ -119,6 +196,8 @@ export function BriefScreen({
   onProfile,
   onAsk,
   onDraft,
+  onOpenHotels,
+  onOpenCompare,
 }: {
   businesses: Business[];
   metricsBy: Record<string, Metrics>;
@@ -133,7 +212,14 @@ export function BriefScreen({
   onProfile: () => void;
   onAsk: () => void;
   onDraft: (insight: Insight) => void;
+  /** Jump to the hospitality command center (only meaningful when hotels exist). */
+  onOpenHotels?: () => void;
+  /** Open the same-brand head-to-head comparison for a unit-compare insight. */
+  onOpenCompare?: (insight: Insight) => void;
 }) {
+  const ops = businesses.filter((b) => b.type !== "hotel");
+  const hotels = businesses.filter((b) => b.type === "hotel");
+  const hotelPortfolio = hotels.length ? hotelPortfolioMetrics(hotels) : null;
   const today = new Date();
   const hour = today.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -159,7 +245,7 @@ export function BriefScreen({
           <button
             onClick={onProfile}
             className="grid h-9 w-9 place-items-center rounded-full text-[14px] font-bold text-white shadow-lg active:scale-90"
-            style={{ background: "linear-gradient(135deg,#8b5cf6,#4f46e5)" }}
+            style={{ background: "linear-gradient(135deg,#e0ae49,#0a263e)" }}
           >
             A
           </button>
@@ -170,11 +256,11 @@ export function BriefScreen({
             <span
               className={cx(
                 "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                source === "real" ? "bg-emerald-400/12 text-emerald-400" : "bg-amber-400/12 text-amber-400",
+                source === "real" ? "bg-up/12 text-up" : "bg-brass/12 text-brass",
               )}
             >
               <span
-                className={cx("h-1.5 w-1.5 rounded-full", source === "real" ? "bg-emerald-400" : "bg-amber-400")}
+                className={cx("h-1.5 w-1.5 rounded-full", source === "real" ? "bg-up" : "bg-brass")}
               />
               {source === "real" ? "Live" : "Sample data"}
             </span>
@@ -182,6 +268,17 @@ export function BriefScreen({
           <h1 className="mt-0.5 text-[26px] font-bold tracking-tight text-white">{greeting}, Arya</h1>
         </header>
       </div>
+
+      {/* Helm's read — the COO speaks first: Claude's prioritized morning narrative */}
+      {aiBrief && (
+        <Card className="border-brass/20 bg-brass/[0.06] p-4">
+          <div className="mb-1.5 flex items-center gap-1.5">
+            <HelmMark size={14} className="text-brass" />
+            <span className="text-[11px] font-bold uppercase tracking-wide text-brass">Helm's read</span>
+          </div>
+          <p className="text-[14px] leading-relaxed text-ink">{aiBrief}</p>
+        </Card>
+      )}
 
       {/* Empire snapshot */}
       <Card className="overflow-hidden p-5">
@@ -197,7 +294,7 @@ export function BriefScreen({
           </div>
         </div>
         <div className="-mx-1 mt-2">
-          <AreaTrend data={empire.combinedSeries} color="#7c6cf5" height={110} />
+          <TrendRibbon data={empire.combinedSeries} color="#e0ae49" height={110} />
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-4">
           <Stat label="This week" value={usdCompact(empire.weekToDate)} />
@@ -205,7 +302,7 @@ export function BriefScreen({
           <Stat
             label="Net worth"
             value={usdCompact(empire.netWorth)}
-            accent="text-violet-300"
+            accent="text-brass"
           />
         </div>
       </Card>
@@ -213,29 +310,21 @@ export function BriefScreen({
       {/* Ask Helm */}
       <button
         onClick={onAsk}
-        className="flex w-full items-center gap-2.5 rounded-2xl border border-violet-400/20 bg-violet-500/[0.07] px-4 py-3 active:scale-[0.99]"
+        className="flex w-full items-center gap-2.5 rounded-2xl border border-brass/20 bg-brass/[0.07] px-4 py-3 active:scale-[0.99]"
       >
-        <HelmMark size={18} className="text-violet-300" />
+        <HelmMark size={18} className="text-brass" />
         <span className="text-[14px] text-white/50">Ask Helm anything…</span>
-        <Sparkles size={15} className="ml-auto text-violet-300/70" />
+        <Sparkles size={15} className="ml-auto text-brass/70" />
       </button>
 
-      {/* Helm's read — Claude's prioritized morning narrative (only when configured) */}
-      {aiBrief && (
-        <Card className="border-violet-400/15 bg-violet-500/[0.06] p-4">
-          <div className="mb-1.5 flex items-center gap-1.5">
-            <HelmMark size={14} className="text-violet-300" />
-            <span className="text-[11px] font-bold uppercase tracking-wide text-violet-300">Helm's read</span>
-          </div>
-          <p className="text-[14px] leading-relaxed text-white/85">{aiBrief}</p>
-        </Card>
-      )}
+      {/* Open loops — what Helm is already tracking, closed with a tap */}
+      <OpenLoops businesses={businesses} />
 
       {/* The Brief */}
       <section>
         <SectionTitle
           right={
-            <button onClick={onSeeAll} className="text-[13px] font-medium text-violet-300">
+            <button onClick={onSeeAll} className="text-[13px] font-medium text-brass">
               See all {insights.length}
             </button>
           }
@@ -254,7 +343,7 @@ export function BriefScreen({
               insight={i}
               onAction={onToast}
               onOpen={i.businessId ? () => onOpenBusiness(i.businessId!) : undefined}
-              onDraft={i.action ? () => onDraft(i) : undefined}
+              onDraft={i.action ? () => (i.id.startsWith("unit-compare") ? onOpenCompare?.(i) : onDraft(i)) : undefined}
             />
           ))}
         </div>
@@ -262,9 +351,30 @@ export function BriefScreen({
 
       {/* Businesses quick row */}
       <section>
-        <SectionTitle>Your businesses</SectionTitle>
+        <SectionTitle right={hotelPortfolio ? <span className="text-[12px] text-white/40">{ops.length + hotels.length} total</span> : undefined}>
+          {hotelPortfolio ? "Your portfolio" : "Your businesses"}
+        </SectionTitle>
         <div className="space-y-3">
-          {businesses.map((b) => {
+          {/* Hotels collapse into one portfolio card so 5 properties don't flood the brief. */}
+          {hotelPortfolio && (
+            <Card className="flex items-center gap-3 p-3.5" onClick={onOpenHotels}>
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brass/15 text-brass">
+                <Building2 size={20} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-semibold text-white">Hotel portfolio</p>
+                <p className="truncate text-[12px] text-white/40">
+                  {hotels.length} {hotels.length === 1 ? "property" : "properties"} · {hotelPortfolio.totalRooms.toLocaleString()} rooms · {pct(hotelPortfolio.avgOccupancy, 0)} occ
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[14px] font-semibold text-white tabular-nums">${hotelPortfolio.avgRevpar.toFixed(0)}</p>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-white/35">RevPAR</p>
+              </div>
+              <ChevronRightIcon size={16} className="text-white/25" />
+            </Card>
+          )}
+          {ops.map((b) => {
             const m = metricsBy[b.id];
             const spark = b.series.slice(-14).map((p) => p.revenue);
             return (

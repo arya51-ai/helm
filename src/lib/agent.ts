@@ -1,8 +1,10 @@
-import type { Business, Insight } from "../types";
+import type { Business, Insight, PipItem } from "../types";
 import type { Metrics, EmpireSummary } from "./analytics";
 import { answerQuestion, type AskContext, type AskAnswer } from "./ask";
+import { hotelMetricsFor, type HotelMetrics } from "./hotelAnalytics";
 import { summarizeForecast, paceToGoal } from "./forecast";
 import { empireAnomalies } from "./anomalies";
+import { bakedBrief } from "./bakedBrief";
 import { goalFor } from "../data/goals";
 
 /**
@@ -13,7 +15,9 @@ import { goalFor } from "../data/goals";
  *   3. never throws to the caller — the app must never break on the model.
  *
  * Numbers always come from analytics.ts; Claude only prioritizes, explains, and drafts.
- * The owner-state we send is a compact, rounded projection of the same metrics the UI shows.
+ * The owner-state we send is a compact projection of the same metrics the UI shows. Fields the
+ * server-side tools compute on (capitalDeployed, roic, monthlyProfit, anomaly stats) are kept
+ * EXACT/un-rounded so reallocate_what_if math is precise; display-only fields stay rounded.
  */
 
 export type AgentSource = "claude" | "rules";
@@ -45,16 +49,64 @@ export function agentStatus(): Promise<AgentStatus> {
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100; // fractions
 const r0 = (n: number) => Math.round(n); // money
 
-export function buildAgentContext(ctx: AskContext, extra?: Record<string, unknown>) {
-  const businesses = ctx.businesses.map((b) => ({
-    id: b.id,
-    name: b.name,
-    type: b.type,
-    location: b.location,
-    currency: b.currency ?? "USD",
-    capitalDeployed: r0(b.capitalDeployed),
-    netMargin: b.netMargin != null ? r2(b.netMargin) : undefined,
-  }));
+// PIP (Property Improvement Plan) — brand-mandated capital work. Surface the pressure,
+// not the full list: counts of unfinished items by status + the soonest deadline.
+function summarizePip(items?: PipItem[]) {
+  if (!items?.length) return undefined;
+  const count = (s: PipItem["status"]) => items.filter((p) => p.status === s).length;
+  const overdue = count("overdue");
+  const inProgress = count("in-progress");
+  const upcoming = count("upcoming");
+  if (!overdue && !inProgress && !upcoming) return undefined;
+  const next = items
+    .filter((p) => p.status !== "complete")
+    .sort((a, b) => a.deadline.localeCompare(b.deadline))[0];
+  return { overdue, inProgress, upcoming, ...(next ? { nextItem: next.title, nextDeadline: next.deadline } : {}) };
+}
+
+// The hospitality KPI layer for a hotel — the same numbers HotelDetail shows, rounded for the
+// model: rate (ADR), volume (occupancy), the two folded together (RevPAR), share-of-market (RGI
+// vs the comp set), profitability (GOP/labor), 7-day momentum, and PIP pressure.
+function hotelBlock(b: Business, h: HotelMetrics) {
+  const pip = summarizePip(b.pipItems);
+  return {
+    brand: b.brand,
+    rooms: b.rooms,
+    occupancy: r2(h.monthOcc),
+    occToday: r2(h.todayOcc),
+    occVsExpected: r2(h.occVsExpected),
+    adr: r0(h.monthAdr),
+    revpar: r0(h.monthRevpar),
+    revparToday: r0(h.todayRevpar),
+    rgi: r0(h.monthRgi),
+    compSetRevpar: r0(h.todayCompSetRevpar),
+    gopMargin: r2(h.monthGopMargin),
+    laborPct: r2(h.monthLaborPct),
+    revparTrend7: r2(h.revparTrend7),
+    occTrend7: r2(h.occTrend7),
+    rgiTrend7: r2(h.rgiTrend7),
+    ...(pip ? { pip } : {}),
+  };
+}
+
+export function buildAgentContext(ctx: AskContext) {
+  // capitalDeployed / roic / monthlyProfit are kept UN-rounded: the model's tools compute
+  // reallocation math on them (amount × ΔROIC), and rounding ROIC to 2dp would throw the
+  // per-year delta off by hundreds. Display-only fields stay rounded to keep the payload lean.
+  const businesses = ctx.businesses.map((b) => {
+    const m = ctx.metricsBy[b.id];
+    return {
+      id: b.id,
+      name: b.name,
+      type: b.type,
+      location: b.location,
+      currency: b.currency ?? "USD",
+      capitalDeployed: b.capitalDeployed,
+      netMargin: b.netMargin != null ? r2(b.netMargin) : undefined,
+      roic: m ? m.roic : undefined,
+      monthlyProfit: m ? m.monthlyProfit : undefined,
+    };
+  });
   const metricsBy: Record<string, unknown> = {};
   const goals: Record<string, unknown> = {};
   for (const b of ctx.businesses) {
@@ -65,23 +117,31 @@ export function buildAgentContext(ctx: AskContext, extra?: Record<string, unknow
         marketValue: r0(m.marketValue),
         totalReturn: r2(m.totalReturn),
         dayChangeUsd: r0(m.dayChangeUsd),
-        roic: r2(m.roic),
+        roic: m.roic, // exact — compare_roic / reallocate_what_if compute on it
+        monthlyProfit: m.monthlyProfit,
       };
     } else {
       const fc = summarizeForecast(b.series, 30);
-      metricsBy[b.id] = {
+      const base: Record<string, unknown> = {
         today: r0(m.today),
         vsExpected: r2(m.vsExpected),
         expectedToday: r0(m.expectedToday),
         wow: r2(m.wow),
         weekToDate: r0(m.weekToDate),
         last30: r0(m.last30),
-        roic: r2(m.roic),
-        monthlyProfit: r0(m.monthlyProfit),
+        roic: m.roic, // exact
+        monthlyProfit: m.monthlyProfit, // exact
         transactionsToday: m.transactionsToday,
         avgTicket: r2(m.avgTicket),
         forecastNext30: fc ? r0(fc.total) : null,
       };
+      // Hotels get a hospitality KPI layer alongside the generic operating metrics, so the COO
+      // reasons in RevPAR/RGI/occupancy terms — not just "revenue".
+      if (b.type === "hotel") {
+        const h = hotelMetricsFor(b);
+        if (h) base.hotel = hotelBlock(b, h);
+      }
+      metricsBy[b.id] = base;
       const goal = goalFor(b.id);
       if (goal > 0) {
         const p = paceToGoal(b.series, goal);
@@ -95,13 +155,14 @@ export function buildAgentContext(ctx: AskContext, extra?: Record<string, unknow
     .filter((a) => Math.abs(a.vsExpected) >= 0.08)
     .slice(0, 6)
     .map((a) => ({
+      businessId: a.businessId,
       business: a.businessName,
       when: a.endDate,
       kind: a.kind,
-      sigma: r2(a.z),
-      vsExpected: r2(a.vsExpected),
-      actual: r0(a.actual),
-      expected: r0(a.expected),
+      sigma: a.z, // exact — explain_anomaly reads these straight back
+      vsExpected: a.vsExpected,
+      actual: a.actual,
+      expected: a.expected,
       runLength: a.runLength,
     }));
 
@@ -132,7 +193,6 @@ export function buildAgentContext(ctx: AskContext, extra?: Record<string, unknow
     })),
     ...(Object.keys(goals).length ? { goals } : {}),
     ...(anomalies.length ? { anomalies } : {}),
-    ...(extra ?? {}),
   };
 }
 
@@ -190,22 +250,29 @@ export async function askAgent(
   }
 }
 
-// ── Morning brief narrative (null when Claude isn't available) ─────────────────
+// ── Morning brief narrative ────────────────────────────────────────────────────
+// Three-tier: real Claude when a key is configured → the baked COO read (computed from
+// live signals) otherwise. Never null, so the "Helm's read" card always has something true
+// to say even with no API key — the model only *upgrades* the narrative when present.
 export async function generateBrief(ctx: AskContext): Promise<string | null> {
+  const baked = () => {
+    const t = bakedBrief(ctx);
+    return t || null;
+  };
   try {
     const status = await agentStatus();
-    if (!status.available) return null;
+    if (!status.available) return baked();
     const resp = await fetch(`${API}/brief`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ context: buildAgentContext(ctx) }),
     });
-    if (!resp.ok) return null;
+    if (!resp.ok) return baked();
     const j = await resp.json();
     if (j?.available && j.text && !j.error) return String(j.text).trim();
-    return null;
+    return baked();
   } catch {
-    return null;
+    return baked();
   }
 }
 

@@ -24,7 +24,7 @@ export function Delta({
     <span
       className={cx(
         "inline-flex items-center gap-1 rounded-full font-semibold tabular-nums",
-        up ? "bg-emerald-400/12 text-emerald-400" : "bg-rose-400/12 text-rose-400",
+        up ? "bg-up/12 text-up" : "bg-down/12 text-down",
         size === "lg" ? "px-2.5 py-1 text-sm" : "px-2 py-0.5 text-xs",
         className,
       )}

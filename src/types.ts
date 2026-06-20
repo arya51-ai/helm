@@ -1,4 +1,4 @@
-export type BusinessType = "restaurant" | "retail" | "portfolio";
+export type BusinessType = "restaurant" | "retail" | "portfolio" | "hotel" | "fuel";
 
 /** Reporting currency for a business's raw figures. */
 export type Currency = "USD" | "CAD" | "INR";
@@ -55,6 +55,141 @@ export interface Business {
   annualReturn?: number;
   /** Portfolio-only: individual positions */
   holdings?: Holding[];
+  /** Hotel-only: daily hospitality KPIs keyed by ISO date. */
+  hotelSeries?: HotelDay[];
+  /** Hotel-only: brand (Marriott, Hilton, IHG, etc.) */
+  brand?: string;
+  /** Hotel-only: total room count */
+  rooms?: number;
+  /** Hotel-only: star rating (1-5) */
+  stars?: number;
+  /** Hotel-only: online review aggregate */
+  reviewScore?: number;
+  /** Hotel-only: number of reviews */
+  reviewCount?: number;
+  /** Hotel-only: PIP (Property Improvement Plan) items */
+  pipItems?: PipItem[];
+  /** Hotel-only: true when comp-set / RGI was defaulted to fair share (no STR data) — render
+   *  as an estimate, not a measured benchmark. */
+  compEstimated?: boolean;
+  /** Hotel-only: true when GOP & labor were estimated from default margins (no P&L) — render
+   *  the margin/labor numbers as estimates, not measured costs. */
+  costEstimated?: boolean;
+  /** Fuel-only: daily fuel + c-store KPIs keyed by ISO date. */
+  fuelSeries?: FuelDay[];
+  /** Fuel-only: number of fueling positions (pumps). */
+  pumps?: number;
+}
+
+/** One day of gas-station economics — the two-engine business: thin-margin fuel + fat-margin
+ *  inside (c-store). Rides alongside the generic DayPoint, same as HotelDay. */
+export interface FuelDay {
+  date: string;
+  /** Gallons of fuel sold */
+  gallonsSold: number;
+  /** Fuel revenue (gallons × pump price) */
+  fuelRevenue: number;
+  /** Gross margin dollars on fuel */
+  fuelMargin: number;
+  /** Cents-per-gallon margin (the number a fuel retailer lives by) */
+  cpg: number;
+  /** Inside / c-store sales */
+  insideSales: number;
+  /** Gross margin dollars on inside sales */
+  insideMargin: number;
+  /** Inside margin as a fraction (0-1) */
+  insideMarginPct: number;
+  /** Other revenue — car wash, lottery commission, food service */
+  otherRevenue: number;
+  /** Gross margin dollars on other revenue */
+  otherMargin: number;
+  /** Total revenue (fuel + inside + other) */
+  totalRevenue: number;
+  /** Total gross profit (fuelMargin + insideMargin + otherMargin) */
+  grossProfit: number;
+}
+
+/** One day of hotel-specific KPIs — rides alongside the generic DayPoint. */
+export interface HotelDay {
+  date: string;
+  /** Rooms sold */
+  roomsSold: number;
+  /** Total rooms available */
+  roomsAvailable: number;
+  /** Occupancy rate (0-1) */
+  occupancy: number;
+  /** Average Daily Rate ($) */
+  adr: number;
+  /** Revenue Per Available Room = occupancy × ADR */
+  revpar: number;
+  /** Total room revenue */
+  roomRevenue: number;
+  /** Food & Beverage revenue */
+  fbRevenue: number;
+  /** Other revenue (spa, parking, events) */
+  otherRevenue: number;
+  /** Total revenue (room + F&B + other) */
+  totalRevenue: number;
+  /** Gross Operating Profit */
+  gop: number;
+  /** GOP margin (0-1) */
+  gopMargin: number;
+  /** Labor cost */
+  laborCost: number;
+  /** Labor as % of revenue (0-1) */
+  laborPct: number;
+  /** Comp set RevPAR (STR benchmark) */
+  compSetRevpar: number;
+  /** RevPAR Index (RGI) = property RevPAR / comp set RevPAR × 100 */
+  rgi: number;
+}
+
+/** Property Improvement Plan item — brand-mandated renovations/upgrades. */
+export interface PipItem {
+  id: string;
+  title: string;
+  category: "rooms" | "lobby" | "exterior" | "FF&E" | "technology" | "safety";
+  status: "complete" | "in-progress" | "upcoming" | "overdue";
+  deadline: string;
+  estimatedCost: number;
+  actualCost?: number;
+}
+
+/** Aggregated hotel portfolio metrics. */
+export interface HotelPortfolioMetrics {
+  totalRooms: number;
+  avgOccupancy: number;
+  avgAdr: number;
+  avgRevpar: number;
+  totalRoomRevenue: number;
+  totalRevenue: number;
+  totalGop: number;
+  avgGopMargin: number;
+  avgRgi: number;
+  avgLaborPct: number;
+  avgReviewScore: number;
+  totalReviewCount: number;
+  /** Per-property summary for the command center */
+  properties: HotelPropertySummary[];
+}
+
+export interface HotelPropertySummary {
+  id: string;
+  name: string;
+  shortName: string;
+  brand: string;
+  location: string;
+  rooms: number;
+  accent: string;
+  occupancy: number;
+  adr: number;
+  revpar: number;
+  rgi: number;
+  gopMargin: number;
+  laborPct: number;
+  reviewScore: number;
+  revparTrend: number;
+  occupancyTrend: number;
 }
 
 export type InsightKind = "alert" | "opportunity" | "win" | "capital" | "info";

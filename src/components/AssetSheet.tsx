@@ -88,12 +88,12 @@ export function AssetSheet({
   return (
     <div className="fixed inset-0 z-[55] mx-auto flex max-w-[440px] flex-col justify-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="animate-sheet-up relative max-h-[92%] overflow-y-auto rounded-t-[2rem] border-t border-white/10 bg-[#101218] px-5 pb-9 pt-3">
+      <div className="animate-sheet-up relative max-h-[92%] overflow-y-auto rounded-t-[2rem] border-t border-white/10 bg-[#0e3052] px-5 pb-9 pt-3">
         <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-white/15" />
         <span
           className={cx(
             "text-[11px] font-bold uppercase tracking-wide",
-            mode === "liability" ? "text-rose-300" : "text-emerald-300",
+            mode === "liability" ? "text-down" : "text-up",
           )}
         >
           {editing ? "Edit" : "Add"} {eyebrow.toLowerCase()}
@@ -154,7 +154,7 @@ export function AssetSheet({
         {editing && (
           <button
             onClick={remove}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[13px] font-semibold text-rose-300/80 active:scale-[0.98]"
+            className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[13px] font-semibold text-down/80 active:scale-[0.98]"
           >
             <Trash2 size={14} /> Remove
           </button>

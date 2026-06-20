@@ -2,6 +2,7 @@ import type { Business, Insight } from "../types";
 import type { Metrics } from "./analytics";
 import { usd, usdCompact, signedPct, pct, weekday, daysAgo, shortDate } from "./format";
 import { empireAnomalies, type Anomaly } from "./anomalies";
+import { deepInsights } from "./deepInsights";
 
 /**
  * The COO brain. Turns raw metrics across every business into a ranked feed of
@@ -27,6 +28,10 @@ export function buildInsights(
     anomShown.add(a.businessId);
     out.push(anomalyToInsight(a));
   }
+
+  // ── The deep COO read: year-over-year trajectory, weekday shape, seasonality,
+  // capital efficiency, ticket drift — the judgment layer, computed from live data. ──
+  out.push(...deepInsights(businesses, metricsBy));
 
   // ── Capital allocation: idle cash vs best return on capital ───────────────
   const best = [...ops].sort((a, b) => metricsBy[b.id].roic - metricsBy[a.id].roic)[0];
@@ -101,22 +106,6 @@ export function buildInsights(
         action: { label: "Open business", done: "Opening business ✓" },
       });
     }
-  }
-
-  // ── A forward-looking opportunity ─────────────────────────────────────────
-  const riverside = ops.find((b) => b.type === "retail");
-  if (riverside) {
-    out.push({
-      id: "opp-weekend",
-      businessId: riverside.id,
-      kind: "opportunity",
-      title: `Stock up — ${riverside.name}'s weekend is its biggest window`,
-      detail: `Fri–Sat run ~24% above weekdays here. Inventory on your top SKUs is trending toward a Saturday stockout at the current pace. A reorder today lands in time.`,
-      priority: 42,
-      metric: "Fri–Sat",
-      metricUp: true,
-      action: { label: "Draft reorder", done: "Reorder draft created ✓" },
-    });
   }
 
   return out.sort((a, b) => b.priority - a.priority);

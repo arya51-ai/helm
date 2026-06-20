@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, Sparkles, ArrowUp, ChevronRight } from "lucide-react";
-import { SUGGESTED_QUESTIONS, type AskContext, type AskAnswer } from "../lib/ask";
+import { suggestedQuestionsFor, type AskContext, type AskAnswer } from "../lib/ask";
 import { askAgent, type AgentSource } from "../lib/agent";
 import { HelmMark } from "./Brand";
 import { cx } from "./ui";
@@ -65,13 +65,13 @@ export function AskSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] mx-auto flex max-w-[440px] flex-col bg-[#0a0b10]">
+    <div className="fixed inset-0 z-[60] mx-auto flex max-w-[440px] flex-col bg-[#0a263e]">
       <div className="flex items-center gap-3 px-4 pb-3 pt-5">
         <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white/[0.06] active:scale-90">
           <ChevronLeft size={20} className="text-white" />
         </button>
         <div className="flex items-center gap-2">
-          <HelmMark size={20} className="text-violet-300" />
+          <HelmMark size={20} className="text-brass" />
           <h1 className="text-[16px] font-bold text-white">Ask Helm</h1>
         </div>
       </div>
@@ -79,15 +79,15 @@ export function AskSheet({
       <div className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-4 pb-4">
         {msgs.length === 0 && (
           <div className="pt-5">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-violet-500/15">
-              <Sparkles size={22} className="text-violet-300" />
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brass/15">
+              <Sparkles size={22} className="text-brass" />
             </div>
             <h2 className="mt-4 text-[20px] font-bold tracking-tight text-white">Ask anything about your empire</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-white/50">
               Real answers from your live numbers — sales, profit, net worth, and where to put your cash.
             </p>
             <div className="mt-5 space-y-2">
-              {SUGGESTED_QUESTIONS.map((q) => (
+              {suggestedQuestionsFor(ctx).map((q) => (
                 <button
                   key={q}
                   onClick={() => ask(q)}
@@ -110,8 +110,8 @@ export function AskSheet({
             </div>
           ) : (
             <div key={m.id} className="flex gap-2.5">
-              <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-violet-500/15">
-                <HelmMark size={15} className="text-violet-300" />
+              <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xl bg-brass/15">
+                <HelmMark size={15} className="text-brass" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="rounded-2xl rounded-tl-md border border-white/[0.07] bg-white/[0.03] px-3.5 py-3">
@@ -119,7 +119,7 @@ export function AskSheet({
                     <div
                       className={cx(
                         "mb-1 text-[20px] font-bold tracking-tight tabular-nums",
-                        m.answer.metricUp === false ? "text-rose-400" : "text-white",
+                        m.answer.metricUp === false ? "text-down" : "text-white",
                       )}
                     >
                       {m.answer.metric}
@@ -133,7 +133,7 @@ export function AskSheet({
                   {m.answer?.businessId && (
                     <button
                       onClick={() => onOpenBusiness(m.answer!.businessId!)}
-                      className="mt-2 inline-flex items-center gap-0.5 text-[12px] font-semibold text-violet-300"
+                      className="mt-2 inline-flex items-center gap-0.5 text-[12px] font-semibold text-brass"
                     >
                       Open <ChevronRight size={13} />
                     </button>

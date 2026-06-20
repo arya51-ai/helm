@@ -104,7 +104,7 @@ export function BusinessDetail({
 
   return (
     <>
-    <div className="fixed inset-0 z-40 mx-auto flex max-w-[440px] flex-col bg-[#0a0b10]">
+    <div className="fixed inset-0 z-40 mx-auto flex max-w-[440px] flex-col bg-[#0a263e]">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-5">
         <div className="flex min-w-0 items-center gap-3">
@@ -238,7 +238,7 @@ export function BusinessDetail({
         <div className="grid grid-cols-2 gap-3">
           {isPort ? (
             <>
-              <Kpi label="Total gain" value={usd(metrics.totalGain)} accent="text-emerald-400" />
+              <Kpi label="Total gain" value={usd(metrics.totalGain)} accent="text-up" />
               <Kpi label="Total return" value={signedPct(metrics.totalReturn)} />
               <Kpi label="Day change" value={signedUsd(metrics.dayChangeUsd)} />
               <Kpi label="Cost basis" value={usdCompact(metrics.costBasis)} />
@@ -250,7 +250,7 @@ export function BusinessDetail({
               <Kpi label="Transactions today" value={String(metrics.transactionsToday)} />
               <Kpi label="Avg ticket" value={m(metrics.avgTicket, true)} />
               <Kpi label="Profit / mo" value={m(metrics.monthlyProfit)} />
-              <Kpi label="Return on capital" value={pct(metrics.roic, 0)} accent="text-violet-300" />
+              <Kpi label="Return on capital" value={pct(metrics.roic, 0)} accent="text-brass" />
             </>
           )}
         </div>
@@ -291,7 +291,7 @@ export function BusinessDetail({
                       <span
                         className={cx(
                           "rounded-md px-1.5 py-0.5 text-[10px] font-bold",
-                          pace.onTrack ? "bg-emerald-400/12 text-emerald-400" : "bg-amber-400/12 text-amber-400",
+                          pace.onTrack ? "bg-up/12 text-up" : "bg-brass/12 text-brass",
                         )}
                       >
                         {pace.onTrack ? "On track" : "Behind pace"}
@@ -302,7 +302,7 @@ export function BusinessDetail({
                         className="absolute inset-y-0 left-0 rounded-full"
                         style={{
                           width: `${Math.min(100, Math.max(2, pace.fractionToGoal * 100))}%`,
-                          background: pace.onTrack ? "#34d399" : "#fbbf24",
+                          background: pace.onTrack ? "#34c79a" : "#e0ae49",
                         }}
                       />
                       <div
@@ -314,7 +314,7 @@ export function BusinessDetail({
                       <span>{m(pace.mtdActual)} so far</span>
                       <span>projected {m(pace.projectedMonthEnd)}</span>
                     </div>
-                    <button onClick={() => setGoalEdit(true)} className="mt-2 text-[11px] font-medium text-violet-300">
+                    <button onClick={() => setGoalEdit(true)} className="mt-2 text-[11px] font-medium text-brass">
                       Edit goal
                     </button>
                   </>
@@ -339,7 +339,7 @@ export function BusinessDetail({
                 ) : (
                   <button
                     onClick={() => setGoalEdit(true)}
-                    className="text-[13px] font-medium text-violet-300"
+                    className="text-[13px] font-medium text-brass"
                   >
                     + Set a monthly goal
                   </button>
@@ -364,12 +364,12 @@ export function BusinessDetail({
                   >
                     <span
                       className="grid h-8 w-8 shrink-0 place-items-center rounded-lg"
-                      style={{ background: down ? "#ef444422" : "#22c55e22" }}
+                      style={{ background: down ? "#e2685c22" : "#34c79a22" }}
                     >
                       {down ? (
-                        <TrendingDown size={15} className="text-rose-400" />
+                        <TrendingDown size={15} className="text-down" />
                       ) : (
-                        <TrendingUp size={15} className="text-emerald-400" />
+                        <TrendingUp size={15} className="text-up" />
                       )}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -381,7 +381,7 @@ export function BusinessDetail({
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className={cx("text-[13.5px] font-semibold tabular-nums", down ? "text-rose-300" : "text-emerald-300")}>
+                      <p className={cx("text-[13.5px] font-semibold tabular-nums", down ? "text-down" : "text-up")}>
                         {signedPct(a.vsExpected, 0)}
                       </p>
                       <p className="text-[11px] text-white/40">{m(Math.abs(a.delta))}</p>
@@ -487,7 +487,7 @@ export function BusinessDetail({
           <div>
             <h2 className="mb-2 flex items-center gap-2 px-1 text-[14px] font-semibold text-white/90">
               How you compare
-              <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-300">
+              <span className="rounded-full bg-brass/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brass">
                 Beta
               </span>
             </h2>

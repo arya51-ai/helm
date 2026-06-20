@@ -11,7 +11,7 @@ import { cx } from "./ui";
 const CUR_SYMBOL: Record<Currency, string> = { USD: "$", CAD: "C$", INR: "₹" };
 const CURRENCIES: Currency[] = ["USD", "CAD", "INR"];
 /** Accent palette for the card + charts. */
-const ACCENTS = ["#2bb673", "#e0913a", "#7c6cf5", "#10b981", "#3b82f6", "#ec4899", "#ef4444", "#f59e0b"];
+const ACCENTS = ["#34c79a", "#e0ae49", "#e0ae49", "#34c79a", "#6fa8dc", "#e0ae49", "#e2685c", "#e0ae49"];
 
 /**
  * Edit a business: its profile (name, location, category, color) and its economics
@@ -87,12 +87,12 @@ export function EconomicsEditor({
   return (
     <div className="fixed inset-0 z-[55] mx-auto flex max-w-[440px] flex-col justify-end">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="animate-sheet-up relative max-h-[92%] overflow-y-auto rounded-t-[2rem] border-t border-white/10 bg-[#101218] px-5 pb-9 pt-3">
+      <div className="animate-sheet-up relative max-h-[92%] overflow-y-auto rounded-t-[2rem] border-t border-white/10 bg-[#0e3052] px-5 pb-9 pt-3">
         <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-white/15" />
 
         <div className="flex items-center gap-2">
-          <SlidersHorizontal size={16} className="text-violet-300" />
-          <span className="text-[11px] font-bold uppercase tracking-wide text-violet-300">Edit business</span>
+          <SlidersHorizontal size={16} className="text-brass" />
+          <span className="text-[11px] font-bold uppercase tracking-wide text-brass">Edit business</span>
         </div>
         <h2 className="mt-2 text-[19px] font-bold tracking-tight text-white">Edit {business.name}</h2>
         <p className="mt-1 text-[13px] text-white/50">
@@ -117,7 +117,7 @@ export function EconomicsEditor({
               aria-label={`Accent ${c}`}
               className={cx(
                 "h-8 w-8 rounded-full transition active:scale-90",
-                accent === c ? "ring-2 ring-white ring-offset-2 ring-offset-[#101218]" : "ring-1 ring-white/10",
+                accent === c ? "ring-2 ring-white ring-offset-2 ring-offset-[#0e3052]" : "ring-1 ring-white/10",
               )}
               style={{ background: c }}
             />
@@ -162,7 +162,7 @@ export function EconomicsEditor({
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4">
             <p className="text-[12px] font-medium text-white/45">Return on capital</p>
-            <p className="mt-1 text-[22px] font-bold tracking-tight text-violet-300 tabular-nums">
+            <p className="mt-1 text-[22px] font-bold tracking-tight text-brass tabular-nums">
               {pct(preview.roic, 0)}
             </p>
           </div>
@@ -207,7 +207,7 @@ export function EconomicsEditor({
                 </button>
                 <button
                   onClick={onRemove}
-                  className="flex-1 rounded-full bg-rose-500/90 py-3 text-[14px] font-semibold text-white active:scale-[0.98]"
+                  className="flex-1 rounded-full bg-down/90 py-3 text-[14px] font-semibold text-white active:scale-[0.98]"
                 >
                   Remove
                 </button>
@@ -216,7 +216,7 @@ export function EconomicsEditor({
           ) : (
             <button
               onClick={() => setConfirmRemove(true)}
-              className="flex w-full items-center justify-center gap-1.5 py-2 text-[13px] font-semibold text-rose-300/80 active:scale-[0.98]"
+              className="flex w-full items-center justify-center gap-1.5 py-2 text-[13px] font-semibold text-down/80 active:scale-[0.98]"
             >
               <Trash2 size={14} /> Remove business
             </button>

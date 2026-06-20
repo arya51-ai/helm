@@ -16,6 +16,7 @@ import type { DataSource } from "../data/source";
 import { clearImported } from "../data/source";
 import { clearOverrides } from "../data/overrides";
 import { readRemoved, clearRemoved } from "../data/removed";
+import { PROFILES, readProfileId, writeProfileId, type ProfileId } from "../data/profiles";
 import { RATES_TO_USD, setRateToUSD, resetRates } from "../lib/currency";
 import { longDate, shortDate, daysAgo } from "../lib/format";
 import { Card, SectionTitle, cx } from "./ui";
@@ -55,7 +56,16 @@ export function SettingsScreen({
       return false;
     }
   });
+  const [profileId, setProfileId] = useState<ProfileId>(() => readProfileId());
   const removedCount = readRemoved().length;
+
+  function switchProfile(id: ProfileId) {
+    if (id === profileId) return;
+    writeProfileId(id);
+    setProfileId(id);
+    onReload();
+    onToast(`Switched to ${PROFILES.find((p) => p.id === id)?.label} ✓`);
+  }
 
   async function enablePush() {
     if (typeof Notification === "undefined") {
@@ -137,7 +147,7 @@ export function SettingsScreen({
       <header className="flex items-center gap-3.5 px-1 pt-1">
         <div
           className="grid h-14 w-14 place-items-center rounded-full text-[22px] font-bold text-white shadow-lg"
-          style={{ background: "linear-gradient(135deg,#8b5cf6,#4f46e5)" }}
+          style={{ background: "linear-gradient(135deg,#e0ae49,#0a263e)" }}
         >
           {owner[0]}
         </div>
@@ -149,12 +159,48 @@ export function SettingsScreen({
         </div>
       </header>
 
+      {/* Demo persona — preview who Helm adapts to (hospitality switches on with a hotel) */}
+      <section>
+        <SectionTitle>Demo persona</SectionTitle>
+        <Card className="space-y-2 p-3">
+          {PROFILES.map((p) => {
+            const active = p.id === profileId;
+            return (
+              <button
+                key={p.id}
+                onClick={() => switchProfile(p.id)}
+                className={cx(
+                  "flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition",
+                  active ? "border-brass/40 bg-brass/[0.09]" : "border-white/[0.06] bg-white/[0.02] active:scale-[0.99]",
+                )}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-semibold text-white">{p.label}</p>
+                  <p className="truncate text-[12px] text-white/45">{p.sub}</p>
+                </div>
+                <span
+                  className={cx(
+                    "grid h-5 w-5 shrink-0 place-items-center rounded-full border",
+                    active ? "border-brass bg-brass" : "border-white/25",
+                  )}
+                >
+                  {active && <Check size={12} className="text-black" strokeWidth={3} />}
+                </span>
+              </button>
+            );
+          })}
+          <p className="px-1 pt-1 text-[11px] leading-relaxed text-white/35">
+            {PROFILES.find((p) => p.id === profileId)?.blurb}
+          </p>
+        </Card>
+      </section>
+
       {/* Data status */}
       <section>
         <SectionTitle>Data</SectionTitle>
         <Card className="divide-y divide-white/[0.05]">
           <div className="flex items-center gap-3 p-4">
-            <span className={cx("h-2.5 w-2.5 rounded-full", live ? "bg-emerald-400" : "bg-amber-400")} />
+            <span className={cx("h-2.5 w-2.5 rounded-full", live ? "bg-up" : "bg-brass")} />
             <div className="flex-1">
               <p className="text-[14px] font-semibold text-white">{live ? "Live data" : "Sample data"}</p>
               <p className="text-[12px] text-white/40">
@@ -205,10 +251,10 @@ export function SettingsScreen({
             <span
               className={cx(
                 "grid h-9 w-9 shrink-0 place-items-center rounded-2xl",
-                brain?.available ? "bg-violet-500/15" : "bg-white/[0.06]",
+                brain?.available ? "bg-brass/15" : "bg-white/[0.06]",
               )}
             >
-              <Sparkles size={17} className={brain?.available ? "text-violet-300" : "text-white/40"} />
+              <Sparkles size={17} className={brain?.available ? "text-brass" : "text-white/40"} />
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-[14px] font-semibold text-white">
@@ -223,7 +269,7 @@ export function SettingsScreen({
             <span
               className={cx(
                 "h-2.5 w-2.5 shrink-0 rounded-full",
-                brain?.available ? "bg-emerald-400" : "bg-amber-400",
+                brain?.available ? "bg-up" : "bg-brass",
               )}
             />
           </div>
@@ -300,6 +346,23 @@ export function SettingsScreen({
         <SectionTitle>Your data</SectionTitle>
         <Card className="divide-y divide-white/[0.05]">
           <Row
+            icon={Sparkles}
+            label="Start a fresh demo"
+            sub="Clear everything → blank slate to upload into"
+            onClick={() => {
+              clearImported();
+              clearOverrides();
+              clearRemoved();
+              try {
+                localStorage.removeItem("helm:cash:v1");
+              } catch {
+                /* ignore */
+              }
+              writeProfileId("blank");
+              location.reload();
+            }}
+          />
+          <Row
             icon={RotateCcw}
             label="Reset economics to defaults"
             sub="Clears your capital / margin edits"
@@ -340,7 +403,7 @@ export function SettingsScreen({
         <SectionTitle>Install</SectionTitle>
         <Card className="p-4">
           <div className="flex items-center gap-2">
-            <Share size={15} className="text-violet-300" />
+            <Share size={15} className="text-brass" />
             <p className="text-[13px] font-semibold text-white">Add Helm to your home screen</p>
           </div>
           <p className="mt-2 text-[12px] leading-relaxed text-white/50">
@@ -382,12 +445,12 @@ function Row({
       }}
       className="flex w-full items-center gap-3 p-4 text-left active:bg-white/[0.02]"
     >
-      <Icon size={16} className={danger ? "text-rose-400" : "text-white/50"} />
+      <Icon size={16} className={danger ? "text-down" : "text-white/50"} />
       <div className="flex-1">
-        <p className={cx("text-[13.5px] font-semibold", danger ? "text-rose-300" : "text-white")}>{label}</p>
+        <p className={cx("text-[13.5px] font-semibold", danger ? "text-down" : "text-white")}>{label}</p>
         <p className="text-[11px] text-white/40">{sub}</p>
       </div>
-      {done ? <Check size={16} className="text-emerald-400" strokeWidth={3} /> : <ChevronRight size={16} className="text-white/25" />}
+      {done ? <Check size={16} className="text-up" strokeWidth={3} /> : <ChevronRight size={16} className="text-white/25" />}
     </button>
   );
 }

@@ -1,5 +1,6 @@
 import type { Business, Insight } from "../types";
 import type { Metrics, EmpireSummary } from "./analytics";
+import { hotelMetricsFor } from "./hotelAnalytics";
 import { usd, usdCompact, pct, signedPct, signedUsd, weekday, daysAgo } from "./format";
 
 /**
@@ -32,6 +33,33 @@ export const SUGGESTED_QUESTIONS = [
   "How's my portfolio?",
 ];
 
+/**
+ * Context-aware starter questions. When the empire holds hotels, surface the
+ * hospitality beats ("Why is <property> trailing?", "Where is RevPAR headed?")
+ * instead of the shop-centric defaults. Falls back to SUGGESTED_QUESTIONS.
+ */
+export function suggestedQuestionsFor(ctx: AskContext): string[] {
+  const hotels = ctx.businesses.filter((b) => b.type === "hotel" && b.hotelSeries?.length);
+  if (!hotels.length) return SUGGESTED_QUESTIONS;
+
+  // Pick the property with the lowest RGI to headline the "why is X trailing?" prompt.
+  const ranked = hotels
+    .map((h) => ({ h, m: hotelMetricsFor(h) }))
+    .filter((x) => x.m != null)
+    .sort((a, b) => (a.m!.monthRgi ?? 0) - (b.m!.monthRgi ?? 0));
+  const trailing = ranked[0]?.h;
+  const trailingName = trailing?.shortName ?? trailing?.name ?? "my weakest property";
+
+  return [
+    "Which property needs me today?",
+    `Why is ${trailingName} trailing?`,
+    "Where is RevPAR headed?",
+    "What needs me today?",
+    "Where should I put my cash?",
+    "What's my net worth?",
+  ];
+}
+
 function findBusiness(q: string, businesses: Business[]): Business | undefined {
   for (const b of businesses) {
     const toks = [b.shortName, b.name].filter(Boolean).flatMap((s) => s!.toLowerCase().split(/\s+/));
@@ -42,6 +70,182 @@ function findBusiness(q: string, businesses: Business[]): Business | undefined {
   if (/\b(stock|stocks|brokerage|portfolio|investment|investments|market)\b/.test(q))
     return businesses.find((b) => b.type === "portfolio");
   return undefined;
+}
+
+/** Weekday (Mon–Thu) vs weekend (Fri–Sun) occupancy over the last ~28 days — same split hotelInsights uses. */
+function midweekSplit(b: Business): { weekday: number; weekend: number } | null {
+  const hs = b.hotelSeries;
+  if (!hs || hs.length < 14) return null;
+  const recent = hs.slice(-28);
+  const wd = recent.filter((d) => {
+    const dow = new Date(`${d.date}T00:00:00`).getDay();
+    return dow >= 1 && dow <= 4;
+  });
+  const we = recent.filter((d) => {
+    const dow = new Date(`${d.date}T00:00:00`).getDay();
+    return dow === 0 || dow === 5 || dow === 6;
+  });
+  const wdOcc = wd.length ? wd.reduce((a, d) => a + d.occupancy, 0) / wd.length : 0;
+  const weOcc = we.length ? we.reduce((a, d) => a + d.occupancy, 0) / we.length : 0;
+  if (!wdOcc || !weOcc) return null;
+  return { weekday: wdOcc, weekend: weOcc };
+}
+
+/**
+ * Hotel-fluent answer for one property. Mirrors the rate-vs-volume / RGI-vs-comp
+ * phrasing in hotelInsights.ts so Ask Helm reads the same language as the cards.
+ */
+function hotelAnswer(biz: Business, q: string): AskAnswer {
+  const m = hotelMetricsFor(biz);
+  const name = biz.shortName ?? biz.name;
+  if (!m) {
+    return { text: `${name} doesn't have hospitality data loaded yet — add a daily RevPAR/occupancy feed and I'll read it.`, businessId: biz.id };
+  }
+
+  // RevPAR direction / "where is RevPAR headed"
+  if (/\b(revpar|rev par|headed|heading|trend|trending|momentum|forecast|outlook|direction|where.*going)\b/.test(q)) {
+    const dir = m.revparTrend30 >= 0.02 ? "climbing" : m.revparTrend30 <= -0.02 ? "softening" : "flat";
+    return {
+      text: `${name}: RevPAR ${usd(m.monthRevpar)} (${pct(m.monthOcc, 0)} occ × ${usd(m.monthAdr)} ADR), ${signedPct(
+        m.revparTrend30,
+        0,
+      )} over 30 days and ${signedPct(m.revparTrend7, 0)} this week — ${dir}. RGI sits at ${m.monthRgi.toFixed(0)} vs the comp set.`,
+      businessId: biz.id,
+      metric: `RevPAR ${signedPct(m.revparTrend30, 0)}`,
+      metricUp: m.revparTrend30 >= 0,
+    };
+  }
+
+  // Labor / cost
+  if (/\b(labor|labour|staff|staffing|payroll|cost|expense)\b/.test(q)) {
+    const target = 0.32;
+    const over = m.monthLaborPct - target;
+    const tail =
+      over > 0.02
+        ? `running hot — ~${usdCompact(m.monthTotalRevenue * over)}/mo above a ${pct(target, 0)} target. Match housekeeping hours to actual occupancy.`
+        : `in line with the ${pct(target, 0)} target — no action needed.`;
+    return {
+      text: `${name}: labor is ${pct(m.monthLaborPct, 0)} of revenue, GOP margin ${pct(m.monthGopMargin, 0)} (${usdCompact(
+        m.monthGop,
+      )} this month). ${tail}`,
+      businessId: biz.id,
+      metric: pct(m.monthLaborPct, 0),
+      metricUp: over <= 0.02,
+    };
+  }
+
+  // GOP / profit / margin
+  if (/\b(gop|profit|margin|profitab|bottom line|making)\b/.test(q)) {
+    return {
+      text: `${name}: GOP ${usdCompact(m.monthGop)} this month at a ${pct(m.monthGopMargin, 0)} margin, on ${usdCompact(
+        m.monthTotalRevenue,
+      )} total revenue. Labor is ${pct(m.monthLaborPct, 0)} and RevPAR ${usd(m.monthRevpar)} (RGI ${m.monthRgi.toFixed(0)}).`,
+      businessId: biz.id,
+      metric: pct(m.monthGopMargin, 0),
+      metricUp: m.monthGopMargin >= 0.38,
+    };
+  }
+
+  // Occupancy
+  if (/\b(occupanc|occ\b|full|empty|vacan|rooms? (sold|filled)|sold out)\b/.test(q)) {
+    const split = midweekSplit(biz);
+    const splitTxt = split
+      ? ` Weekday runs ${pct(split.weekday, 0)} vs weekend ${pct(split.weekend, 0)}.`
+      : "";
+    return {
+      text: `${name}: occupancy ${pct(m.monthOcc, 0)} this month (${signedPct(m.occTrend30, 0)} over 30 days), ADR ${usd(
+        m.monthAdr,
+      )}, RevPAR ${usd(m.monthRevpar)}.${splitTxt}`,
+      businessId: biz.id,
+      metric: pct(m.monthOcc, 0),
+      metricUp: m.occTrend30 >= 0,
+    };
+  }
+
+  // ADR / rate / pricing
+  if (/\b(adr|rate|pricing|price|how much.*charg|charging)\b/.test(q)) {
+    return {
+      text: `${name}: ADR ${usd(m.monthAdr)} (${signedPct(m.adrTrend7, 0)} this week) at ${pct(
+        m.monthOcc,
+        0,
+      )} occupancy → RevPAR ${usd(m.monthRevpar)}. RGI ${m.monthRgi.toFixed(0)} vs comp set ${usd(m.todayCompSetRevpar)}.`,
+      businessId: biz.id,
+      metric: usd(m.monthAdr),
+      metricUp: m.adrTrend7 >= 0,
+    };
+  }
+
+  // Default property read — leads with the rate-vs-volume / RGI diagnosis (the marquee beat).
+  const split = midweekSplit(biz);
+  if (m.monthRgi < 100) {
+    const winningRate = m.monthAdr >= m.todayCompSetRevpar / Math.max(m.monthOcc, 0.01);
+    const lever = split && split.weekend < split.weekday * 0.92
+      ? `you're winning rate (ADR ${usd(m.monthAdr)}) but losing midweek occupancy (${pct(split.weekday, 0)} weekday vs ${pct(
+          split.weekend,
+          0,
+        )} weekend). Drop BAR ~6% Tue/Wed to pull volume.`
+      : winningRate
+        ? `rate's there (ADR ${usd(m.monthAdr)}) but occupancy at ${pct(m.monthOcc, 0)} is leaving rooms unsold — push OTA placement and a midweek BAR cut.`
+        : `you're pricing below the comp set — ADR ${usd(m.monthAdr)} isn't capturing fair share. Tighten rate discipline and audit OTA parity.`;
+    return {
+      text: `${name}: RGI ${m.monthRgi.toFixed(0)} — ${lever}`,
+      businessId: biz.id,
+      metric: `RGI ${m.monthRgi.toFixed(0)}`,
+      metricUp: false,
+    };
+  }
+  // Outperforming comp set
+  const splitTxt = split ? ` Weekday ${pct(split.weekday, 0)} vs weekend ${pct(split.weekend, 0)}.` : "";
+  return {
+    text: `${name}: RGI ${m.monthRgi.toFixed(0)} — beating its comp set. RevPAR ${usd(m.monthRevpar)} on ${pct(
+      m.monthOcc,
+      0,
+    )} occupancy at ${usd(m.monthAdr)} ADR, GOP margin ${pct(m.monthGopMargin, 0)}.${splitTxt} Hold rate discipline — don't discount into strength.`,
+    businessId: biz.id,
+    metric: `RGI ${m.monthRgi.toFixed(0)}`,
+    metricUp: true,
+  };
+}
+
+/** Portfolio/empire-level hotel answer: which property needs attention, RevPAR direction across the book. */
+function hotelPortfolioAnswer(hotels: Business[], q: string): AskAnswer | null {
+  const rows = hotels
+    .map((h) => ({ h, m: hotelMetricsFor(h) }))
+    .filter((x): x is { h: Business; m: NonNullable<ReturnType<typeof hotelMetricsFor>> } => x.m != null);
+  if (!rows.length) return null;
+
+  // "Which property needs me / is trailing / worst" → lowest RGI (fair-share gap is the cleanest single signal).
+  if (/\b(which|what).*(property|properties|hotel|hotels|one)\b/.test(q) || /\b(trailing|worst|weakest|underperform|behind|needs? (me|attention|fixing)|drag|laggard)\b/.test(q)) {
+    const byRgi = [...rows].sort((a, b) => a.m.monthRgi - b.m.monthRgi);
+    const worst = byRgi[0];
+    return hotelAnswer(worst.h, ""); // reuse the property diagnosis (RGI-led)
+  }
+
+  // "Where is RevPAR headed" across the portfolio.
+  if (/\b(revpar|rev par|headed|heading|trend|trending|momentum|forecast|outlook|direction)\b/.test(q)) {
+    const totRev = rows.reduce((a, r) => a + r.m.monthTotalRevenue, 0);
+    const wAvg = (sel: (m: (typeof rows)[number]["m"]) => number) =>
+      totRev ? rows.reduce((a, r) => a + sel(r.m) * r.m.monthTotalRevenue, 0) / totRev : 0;
+    const revparTrend = wAvg((m) => m.revparTrend30);
+    const avgRevpar = wAvg((m) => m.monthRevpar);
+    const avgRgi = wAvg((m) => m.monthRgi);
+    const up = [...rows].sort((a, b) => b.m.revparTrend30 - a.m.revparTrend30)[0];
+    const down = [...rows].sort((a, b) => a.m.revparTrend30 - b.m.revparTrend30)[0];
+    const dir = revparTrend >= 0.02 ? "climbing" : revparTrend <= -0.02 ? "softening" : "holding flat";
+    return {
+      text: `Across ${rows.length} properties RevPAR is ${dir} — ${usd(avgRevpar)} blended (${signedPct(
+        revparTrend,
+        0,
+      )} over 30 days), RGI ~${avgRgi.toFixed(0)}. ${up.h.shortName ?? up.h.name} leads (${signedPct(
+        up.m.revparTrend30,
+        0,
+      )}); ${down.h.shortName ?? down.h.name} lags (${signedPct(down.m.revparTrend30, 0)}).`,
+      metric: `RevPAR ${signedPct(revparTrend, 0)}`,
+      metricUp: revparTrend >= 0,
+    };
+  }
+
+  return null;
 }
 
 export function answerQuestion(raw: string, ctx: AskContext): AskAnswer {
@@ -61,6 +265,13 @@ export function answerQuestion(raw: string, ctx: AskContext): AskAnswer {
     if (top)
       return { text: `${top.title}. ${top.detail}`, businessId: top.businessId, metric: top.metric, metricUp: top.metricUp };
     return { text: "Nothing urgent — everything's tracking close to normal today." };
+  }
+
+  // 1b) Portfolio/empire-level hotel questions (no single property matched): which property needs me, where is RevPAR headed.
+  const hotels = ctx.businesses.filter((b) => b.type === "hotel" && b.hotelSeries?.length);
+  if (hotels.length && !biz && /\b(property|properties|hotel|hotels|revpar|rev par|adr|occupanc|rgi)\b/.test(q)) {
+    const hp = hotelPortfolioAnswer(hotels, q);
+    if (hp) return hp;
   }
 
   // 2) Where to put cash / capital allocation
@@ -135,6 +346,11 @@ export function answerQuestion(raw: string, ctx: AskContext): AskAnswer {
       metric: usdCompact(m.marketValue),
       metricUp: m.totalReturn >= 0,
     };
+  }
+
+  // 6b) A specific hotel — answer in RevPAR/ADR/occupancy/RGI/GOP/labor, never weekToDate/avgTicket.
+  if (biz && biz.type === "hotel") {
+    return hotelAnswer(biz, q);
   }
 
   // 7) A specific operating business

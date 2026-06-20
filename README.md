@@ -76,8 +76,10 @@ connector for the server-side Plaid / TallyPrime calls. Ships as an installable 
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173  (runs with bundled sample data — no setup)
+npm run dev
 ```
+
+Then open **[http://localhost:5173](http://localhost:5173)** — runs with bundled sample data, no setup needed.
 
 Optional, to link real accounts:
 

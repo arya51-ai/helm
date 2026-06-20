@@ -21,7 +21,7 @@ function TooltipBox({ active, payload, currency = "USD" }: any) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload as TrendPoint;
   return (
-    <div className="rounded-xl border border-white/10 bg-[#15161d] px-3 py-2 shadow-xl">
+    <div className="rounded-xl border border-white/10 bg-[#0e3052] px-3 py-2 shadow-xl">
       <div className="text-[11px] font-medium text-white/50">{shortDate(p.date)}</div>
       <div className="text-sm font-semibold text-white tabular-nums">{money(p.revenue, currency)}</div>
     </div>
@@ -259,7 +259,7 @@ export function DowBars({ stats, color, onSelectDow }: { stats: DowStat[]; color
             className="w-full rounded-t-md transition-all"
             style={{
               height: `${s.avg ? Math.max(4, (s.avg / max) * 100) : 0}%`,
-              background: s.best ? color : s.worst ? "#ef4444aa" : `${color}59`,
+              background: s.best ? color : s.worst ? "#e2685caa" : `${color}59`,
             }}
           />
           <span className={`mt-1.5 text-[10px] ${s.best ? "font-bold text-white/80" : "text-white/40"}`}>{s.label}</span>
@@ -411,7 +411,7 @@ export function CalendarHeatmap({
                   {marks?.[iso] && (
                     <span
                       className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full"
-                      style={{ background: marks[iso] === "dip" ? "#ef4444" : "#f59e0b", boxShadow: "0 0 0 1.5px rgba(0,0,0,0.3)" }}
+                      style={{ background: marks[iso] === "dip" ? "#e2685c" : "#e0ae49", boxShadow: "0 0 0 1.5px rgba(0,0,0,0.3)" }}
                     />
                   )}
                   <span className="text-[11px] font-bold leading-none text-white tabular-nums">{compactNum(v)}</span>
@@ -426,7 +426,7 @@ export function CalendarHeatmap({
           <span>tap a day</span>
           {marks && Object.keys(marks).length > 0 && (
             <span className="flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#ef4444" }} />
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: "#e2685c" }} />
               outlier
             </span>
           )}

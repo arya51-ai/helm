@@ -1,5 +1,25 @@
 @import "tailwindcss";
 
+/* ── Helm brand tokens (calm executive cockpit: deep navy + brass + cloud) ── */
+@theme {
+  --color-canvas: #071e33;       /* app background base */
+  --color-surface: #0a263e;      /* Deep Navy — cards / phone body */
+  --color-raised: #0e3052;       /* raised cards / sheets */
+  --color-overlay: #13456b;      /* Navy — chips / active fills */
+  --color-hairline: rgba(244, 247, 250, 0.1);
+
+  --color-ink: #f4f7fa;          /* Cloud — primary text */
+  --color-ink-2: #afc2d4;        /* secondary text */
+  --color-ink-3: #6e89a1;        /* tertiary / muted (large only) */
+
+  --color-brass: #e0ae49;        /* brand + Helm's voice + emphasis */
+  --color-brass-bright: #f7dc95; /* Light Brass — hover / highlight */
+
+  --color-up: #34c79a;           /* money up */
+  --color-down: #e2685c;         /* money down */
+  --color-info: #6fa8dc;         /* low-key FYI / capital */
+}
+
 :root {
   color-scheme: dark;
 }
@@ -13,8 +33,13 @@ body,
 body {
   margin: 0;
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #07080c;
-  color: #e9eaf0;
+  /* Deep navy canvas with a single faint brass glow at the top — calm command. */
+  background:
+    radial-gradient(125% 70% at 50% -12%, rgba(224, 174, 73, 0.12), transparent 58%),
+    linear-gradient(180deg, #071e33 0%, #061525 100%);
+  background-attachment: fixed;
+  color: #f4f7fa;
+  font-variant-numeric: tabular-nums; /* a cockpit reads true: numbers align */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior: none;
@@ -29,6 +54,7 @@ body {
   scrollbar-width: none;
 }
 
+/* ── Motion: calm + controlled, no overshoot ── */
 @keyframes fade-up {
   from {
     opacity: 0;
@@ -39,9 +65,8 @@ body {
     transform: translateY(0);
   }
 }
-
 .animate-fade-up {
-  animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-up 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 @keyframes sheet-up {
@@ -52,7 +77,6 @@ body {
     transform: translateY(0);
   }
 }
-
 .animate-sheet-up {
-  animation: sheet-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: sheet-up 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }

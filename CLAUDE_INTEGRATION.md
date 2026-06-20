@@ -1,18 +1,22 @@
 # Helm — Claude Integration Status
 
-**Current date:** 2026-06-03
+**Current date:** 2026-06-20
 
-> ## ⚠️ PARKED — not funded yet (`*`)
-> The Claude integration is **built and verified in its offline/rule-engine fallback path**, but the
-> **live Claude brain is intentionally inactive**: there is **no `ANTHROPIC_API_KEY`** in `.env` because
-> Helm isn't funded yet. This is a deliberate hold, not a bug. **To switch it on when Helm is funded:**
-> add `ANTHROPIC_API_KEY=...` to `.env` and restart `npm run dev` — `/api/agent/status` flips to
-> `available:true` and every surface below lights up automatically (graceful-degradation pattern, same as
-> Plaid/Tally). Until then everything runs on the grounded rule engine with an "Offline" label. Nothing
-> in the app blocks on this.
+> ## ✅ LIVE — the brain is on (`ANTHROPIC_API_KEY` is set)
+> The Claude integration is **fully active locally**: a real `ANTHROPIC_API_KEY` now exists in `.env`, so
+> the **live Claude brain works** — `/api/agent/status` returns `available:true` and Ask Helm, the Morning
+> Brief, and Action drafts run on real Claude (with the grounded rule engine still underneath as a
+> graceful fallback, same pattern as Plaid/Tally). The old "parked, no key" state is gone.
+>
+> **On a deployment**, the brain ships as **Vercel serverless functions under `api/agent/`** (it's
+> stateless — no separate host needed, unlike the Plaid/Tally server). Set `ANTHROPIC_API_KEY` in Vercel
+> to light it up there too; until then a deploy runs the offline rule engine, indistinguishable in the UI —
+> so always run `npm run smoke <url>` after deploy to prove the live path (see "Deploy" below). Nothing in
+> the app ever blocks on the model.
 
-**Status:** wiring complete (Sonnet 4.6 ask/draft + Opus 4.8 brief); **offline fallback verified**; live
-path **parked pending funding**.
+**Status:** wiring complete (Sonnet 4.6 ask/draft + Opus 4.8 brief); **live path verified locally**;
+**tool-use over the empire math** and **vision ("snap a report")** are the headline new capabilities;
+graceful offline fallback intact.
 
 > **Server-side:** `server/agent.mjs` exposes `/api/agent/{status,ask,brief,draft}` with graceful fallback to rule engine when `ANTHROPIC_API_KEY` is absent. Client feature-detects via `/status` endpoint.
 
@@ -46,6 +50,54 @@ path **parked pending funding**.
 - **Fallback:** None — action stays in draft form; user composes manually if Claude unavailable
 - **Input:** Action type (string) + optional insight context (title/detail)
 - **Verified:** Drafts concise, data-grounded messages; never sends anything (owner reviews first)
+
+---
+
+## 🧠 NEW CAPABILITIES — what the live brain does that rules can't
+
+### Tool-use over the empire math (LIVE)
+The brain doesn't eyeball the rounded JSON — it **calls server-side tools that read full-precision
+numbers straight out of `<owner_state>` and compute on them**. Defined in `server/agent.mjs` (`TOOLS` +
+`runToolLoop`), executed in `runTool()`:
+- `compare_roic()` — every business ranked by return on deployed capital.
+- `reallocate_what_if(amountUsd, fromId, toId)` — the **exact** annual profit delta of moving idle cash
+  from one business to another (`amount × ΔROIC`), plus a ready-to-say sentence. This is the
+  "where should I put my cash?" superpower — it's computed, never estimated.
+- `explain_anomaly(businessId, date?)` — actual vs expected, σ, vsExpected for a flagged move.
+- `get_business`, `pace_to_goal`, `hotel_kpis` — full metrics / goal pace / hospitality KPI block.
+
+Ask (`/ask`) and Brief (`/brief`) run a **bounded tool loop** (up to 5 rounds) before the final answer,
+so figures are precise. `capitalDeployed` / `roic` / `monthlyProfit` are sent **un-rounded** for exactly
+this reason (`src/lib/agent.ts:buildAgentContext`). The rule engine cannot do cross-business reallocation
+math — this is brain-only.
+
+### Vision — "snap a report" (capability)
+Claude (Sonnet/Opus) is vision-capable, and the relay sends a single user turn, so a photo of a paper
+P&L, a POS end-of-day slip, or a vendor invoice can be passed as an image content block alongside the
+owner-state and **read into the same grounded reasoning** — e.g. "snap your Subway daily close and I'll
+tell you if it tracks." The owner-state stays the source of truth for the numbers we already have; vision
+fills the gaps the owner hasn't keyed in yet. (Wire-up is a UI capture → image block on `/ask`; the brain
+side already accepts it.)
+
+---
+
+## 🚀 Deploy — turn the brain on in production
+
+The agent routes are **stateless**, so they ship as **Vercel serverless functions under `api/agent/`**
+(no separate host — that's only the Plaid/Tally server). Steps:
+
+1. **Set a spend cap** at console.anthropic.com **first** — the `/api/agent` relay is **unauthenticated
+   and billed to the key**, so cap it before exposing it.
+2. In **Vercel → Project → Settings → Environment Variables**, set `ANTHROPIC_API_KEY` (and optionally
+   `HELM_ASK_MODEL` / `HELM_BRIEF_MODEL`, which default to `claude-sonnet-4-6` / `claude-opus-4-8`).
+3. **Redeploy.**
+4. **Prove it's live** (a missing key silently falls back to rules — identical in the UI):
+   ```bash
+   npm run smoke https://helm-<hash>.vercel.app
+   ```
+   `scripts/smoke-deploy.mjs` asserts `/status` → `available:true`, `/ask` streams real SSE `{t}` frames
+   then `{done:true}` (NOT a `{available:false}` JSON fallback), and `/brief` returns non-empty text. It
+   **exits non-zero on any failure**, so run it after every brain-enabled deploy. See `DEPLOY.md` Phase 2.
 
 ---
 

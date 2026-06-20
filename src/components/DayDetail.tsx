@@ -31,7 +31,7 @@ export function DayDetail({
   const recency = asOfLabel(d.date);
 
   return (
-    <div className="fixed inset-0 z-[60] mx-auto flex max-w-[440px] flex-col bg-[#0a0b10]">
+    <div className="fixed inset-0 z-[60] mx-auto flex max-w-[440px] flex-col bg-[#0a263e]">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-4 pb-3 pt-5">
         <div className="flex min-w-0 items-center gap-3">
@@ -90,7 +90,7 @@ export function DayDetail({
           </div>
           <p className="mt-1 text-[13px] text-white/45">
             vs {m(d.expected)} on a typical {weekday(d.date, true)} ·{" "}
-            <span className={d.dayChange >= 0 ? "text-emerald-400" : "text-rose-400"}>
+            <span className={d.dayChange >= 0 ? "text-up" : "text-down"}>
               {signedPct(d.dayChange)} vs prior day
             </span>
           </p>
@@ -107,8 +107,8 @@ export function DayDetail({
         {/* Helm's read */}
         <Card className="p-4">
           <div className="mb-2 flex items-center gap-1.5">
-            <Sparkles size={14} className="text-violet-300" />
-            <span className="text-[11px] font-bold uppercase tracking-wide text-violet-300">Helm's read</span>
+            <Sparkles size={14} className="text-brass" />
+            <span className="text-[11px] font-bold uppercase tracking-wide text-brass">Helm's read</span>
           </div>
           <ul className="space-y-1.5">
             {d.reads.map((r, i) => (

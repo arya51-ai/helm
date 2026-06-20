@@ -75,7 +75,7 @@ export function BusinessesScreen({
               <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-3">
                 {isPort ? (
                   <>
-                    <Mini label="Total gain" value={usdCompact(m.totalGain)} accent="text-emerald-400" />
+                    <Mini label="Total gain" value={usdCompact(m.totalGain)} accent="text-up" />
                     <Mini label="Return" value={signedPct(m.totalReturn)} />
                     <Mini label="Positions" value={String(b.holdings?.length ?? 0)} />
                   </>

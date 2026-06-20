@@ -1,8 +1,13 @@
 import type { Business } from "../types";
 import { buildSampleBusinesses } from "./businesses";
+import { buildSampleHotels } from "./hotels";
+import { buildSampleStations } from "./fuel";
+import { buildDevUnits } from "./multiUnit";
+import { extendSeriesToToday } from "./rng";
 import { toDisplayCurrency } from "../lib/currency";
 import { readOverrides, clearOverride } from "./overrides";
 import { readRemoved, addRemoved, restoreRemoved } from "./removed";
+import { readProfileId, profileById, selectSamples } from "./profiles";
 
 export type DataSource = "real" | "mock";
 
@@ -104,16 +109,16 @@ export async function loadBusinesses(): Promise<{ businesses: Business[]; source
       const incoming: unknown[] = Array.isArray(data) ? data : data?.businesses;
       if (Array.isArray(incoming)) {
         const validated = incoming.filter(isValidBusiness).map(normalizeSeries);
-        // Skip if the file data is stale (more than 1 day old relative to mock "today")
-        const mockToday = new Date();
-        mockToday.setHours(0, 0, 0, 0);
-        const mockTodayStr = mockToday.toISOString().split("T")[0];
-        const isStale = validated.some((b) => {
-          const lastDate = b.series[b.series.length - 1]?.date;
-          return lastDate && lastDate < mockTodayStr;
-        });
-        if (!isStale) fileBusinesses = validated;
-        // else: stale real data is ignored; mock data is used instead
+        // Scraped POS data always lags by a few days. Rather than dropping real history to
+        // mock the moment it ages (which made the scrape useless after a day), carry each
+        // real series forward to today so the owner's actual numbers stay current between
+        // scrapes. A fresh scrape simply replaces the projected tail with real days.
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        fileBusinesses = validated.map((b, i) => ({
+          ...b,
+          series: extendSeriesToToday(b.series, today, i + 1),
+        }));
       }
     }
   } catch {
@@ -124,8 +129,26 @@ export async function loadBusinesses(): Promise<{ businesses: Business[]; source
   const hasReal = fileBusinesses.length > 0 || imported.length > 0;
 
   // Rebuild the sample each load so the demo series re-anchors to the current day
-  // (this is what makes the daily refresh actually roll "today" forward).
-  const MOCK = buildSampleBusinesses();
+  // (this is what makes the daily refresh actually roll "today" forward). The active
+  // persona decides which sample shops + hotels seed the demo; a hotel anywhere in the
+  // set is what flips on the hospitality surfaces downstream.
+  const profile = profileById(readProfileId());
+  const sampleBiz = buildSampleBusinesses();
+  const sampleHotels = buildSampleHotels();
+  const sampleStations = buildSampleStations();
+  const sampleUnits = buildDevUnits();
+  const MOCK = [
+    ...selectSamples(sampleBiz, profile.businesses),
+    ...selectSamples(sampleHotels, profile.hotels),
+    ...selectSamples(sampleStations, profile.fuel),
+    ...selectSamples(sampleUnits, profile.units),
+  ];
+  // The persona gates demo-seed businesses everywhere — including ones re-supplied by the
+  // /data.json "real scrape" layer — so a hotel-group demo never has a stray Subway leak in.
+  // Genuinely user-imported businesses (ids outside the seed universe) always pass through.
+  const allSeedIds = new Set([...sampleBiz, ...sampleHotels, ...sampleStations, ...sampleUnits].map((b) => b.id));
+  const allowedSeedIds = new Set(MOCK.map((b) => b.id));
+  const blockedBySeed = (id: string) => allSeedIds.has(id) && !allowedSeedIds.has(id);
   // Merge by id, preserving order: sample → new-from-file → new-from-import
   const byId = new Map<string, Business>(MOCK.map((b) => [b.id, b]));
   const order = MOCK.map((b) => b.id);
@@ -143,7 +166,7 @@ export async function loadBusinesses(): Promise<{ businesses: Business[]; source
   const removed = new Set(readRemoved());
   const merged = toDisplayCurrency(
     order
-      .filter((id) => !removed.has(id))
+      .filter((id) => !removed.has(id) && !blockedBySeed(id))
       .map((id) => {
         const b = byId.get(id)!;
         const o = overrides[id];

@@ -38,11 +38,11 @@ interface Brokerage {
   mode: "manual" | "upload" | "plaid";
 }
 const BROKERS: Brokerage[] = [
-  { id: "plaid", label: "Bank or brokerage", sub: "Securely link via Plaid — Fidelity, Schwab, Robinhood & more", accent: "#0a85ea", mode: "plaid" },
-  { id: "yahoo", label: "Yahoo Finance", sub: "Link your portfolio — live prices by ticker or CSV export", accent: "#7c6cf5", mode: "manual" },
-  { id: "robinhood", label: "Robinhood", sub: "Upload your positions export", accent: "#22c55e", mode: "upload" },
-  { id: "fidelity", label: "Fidelity / Schwab / E*Trade", sub: "Upload your positions CSV", accent: "#38bdf8", mode: "upload" },
-  { id: "manual", label: "Enter manually", sub: "Type tickers, shares, and cost", accent: "#e0913a", mode: "manual" },
+  { id: "plaid", label: "Bank or brokerage", sub: "Securely link via Plaid — Fidelity, Schwab, Robinhood & more", accent: "#6fa8dc", mode: "plaid" },
+  { id: "yahoo", label: "Yahoo Finance", sub: "Link your portfolio — live prices by ticker or CSV export", accent: "#e0ae49", mode: "manual" },
+  { id: "robinhood", label: "Robinhood", sub: "Upload your positions export", accent: "#34c79a", mode: "upload" },
+  { id: "fidelity", label: "Fidelity / Schwab / E*Trade", sub: "Upload your positions CSV", accent: "#6fa8dc", mode: "upload" },
+  { id: "manual", label: "Enter manually", sub: "Type tickers, shares, and cost", accent: "#e0ae49", mode: "manual" },
 ];
 
 export function InvestmentsSheet({
@@ -182,7 +182,7 @@ export function InvestmentsSheet({
     <div className="fixed inset-0 z-[55] mx-auto flex max-w-[440px] flex-col justify-end">
       <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="animate-sheet-up relative max-h-[92%] overflow-y-auto rounded-t-[2rem] border-t border-white/10 bg-[#101218] px-5 pb-9 pt-3">
+      <div className="animate-sheet-up relative max-h-[92%] overflow-y-auto rounded-t-[2rem] border-t border-white/10 bg-[#0e3052] px-5 pb-9 pt-3">
         <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-white/15" />
 
         {/* HOME — choose source */}
@@ -274,14 +274,14 @@ export function InvestmentsSheet({
                     {q && q.price > 0 && r.shares && (
                       <p className="mt-1 px-1 text-[11px] text-white/40 tabular-nums">
                         {q.name} · {usd(q.price, true)}{" "}
-                        <span className={cx(q.changePct >= 0 ? "text-emerald-400" : "text-rose-400")}>{signedPct(q.changePct)}</span>{" "}
+                        <span className={cx(q.changePct >= 0 ? "text-up" : "text-down")}>{signedPct(q.changePct)}</span>{" "}
                         → <span className="font-semibold text-white/70">{usd((parseFloat(r.shares) || 0) * q.price)}</span>
                       </p>
                     )}
                   </div>
                 );
               })}
-              <button onClick={addRow} className="flex items-center gap-1.5 px-1 pt-1 text-[13px] font-medium text-violet-300">
+              <button onClick={addRow} className="flex items-center gap-1.5 px-1 pt-1 text-[13px] font-medium text-brass">
                 <Plus size={15} /> Add holding
               </button>
             </div>
@@ -297,14 +297,14 @@ export function InvestmentsSheet({
               <div className="mt-4 rounded-2xl border border-white/[0.07] bg-white/[0.03] p-4">
                 {srcLabel && (
                   <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-white/45">
-                    <span className={cx("h-1.5 w-1.5 rounded-full", srcLabel.startsWith("Live") ? "bg-emerald-400" : "bg-amber-400")} />
+                    <span className={cx("h-1.5 w-1.5 rounded-full", srcLabel.startsWith("Live") ? "bg-up" : "bg-brass")} />
                     {srcLabel}
                   </div>
                 )}
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <Stat big={usdCompact(mv)} label="Market value" />
-                  <Stat big={signedUsd(dayGain)} label="Day" accent={dayGain >= 0 ? "text-emerald-400" : "text-rose-400"} />
-                  <Stat big={signedUsd(mv - cost)} label="Total gain" accent={mv - cost >= 0 ? "text-emerald-400" : "text-rose-400"} />
+                  <Stat big={signedUsd(dayGain)} label="Day" accent={dayGain >= 0 ? "text-up" : "text-down"} />
+                  <Stat big={signedUsd(mv - cost)} label="Total gain" accent={mv - cost >= 0 ? "text-up" : "text-down"} />
                 </div>
               </div>
             )}
@@ -345,9 +345,9 @@ export function InvestmentsSheet({
         {(view === "syncing" || view === "saving") && (
           <div className="flex flex-col items-center py-16">
             <div className="relative grid h-20 w-20 place-items-center">
-              <div className="absolute inset-0 animate-ping rounded-full bg-violet-500/20" />
-              <div className="grid h-16 w-16 place-items-center rounded-3xl bg-violet-500/15">
-                <Loader2 size={30} className="animate-spin text-violet-300" />
+              <div className="absolute inset-0 animate-ping rounded-full bg-brass/20" />
+              <div className="grid h-16 w-16 place-items-center rounded-3xl bg-brass/15">
+                <Loader2 size={30} className="animate-spin text-brass" />
               </div>
             </div>
             <p className="mt-6 text-[15px] font-semibold text-white">Pulling live market data…</p>
@@ -359,8 +359,8 @@ export function InvestmentsSheet({
         {view === "review" && parsed && (
           <>
             <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-violet-300" />
-              <span className="text-[11px] font-bold uppercase tracking-wide text-violet-300">Parsed</span>
+              <Sparkles size={16} className="text-brass" />
+              <span className="text-[11px] font-bold uppercase tracking-wide text-brass">Parsed</span>
             </div>
             <h2 className="mt-2 text-[19px] font-bold tracking-tight text-white">{parsed.holdings.length} holdings found</h2>
             <p className="mt-1 text-[13px] text-white/50">
@@ -396,8 +396,8 @@ export function InvestmentsSheet({
         {/* DONE */}
         {view === "done" && (
           <div className="flex flex-col items-center py-12">
-            <div className="grid h-16 w-16 place-items-center rounded-full bg-emerald-400/15">
-              <Check size={32} className="text-emerald-400" strokeWidth={3} />
+            <div className="grid h-16 w-16 place-items-center rounded-full bg-up/15">
+              <Check size={32} className="text-up" strokeWidth={3} />
             </div>
             <p className="mt-5 text-[17px] font-bold text-white">Portfolio synced</p>
             <p className="mt-1 px-6 text-center text-[13px] text-white/50">
@@ -419,7 +419,7 @@ function ReviewTotals({ holdings }: { holdings: Holding[] }) {
   return (
     <div className="mt-4 grid grid-cols-2 gap-3">
       <Stat big={usd(mv)} label="Market value" />
-      <Stat big={signedUsd(mv - cost)} label="Total gain" accent={mv - cost >= 0 ? "text-emerald-400" : "text-rose-400"} />
+      <Stat big={signedUsd(mv - cost)} label="Total gain" accent={mv - cost >= 0 ? "text-up" : "text-down"} />
     </div>
   );
 }
@@ -510,7 +510,7 @@ function PlaidConnectView({
   return (
     <>
       <BackBar onBack={onBack} />
-      <div className="grid h-12 w-12 place-items-center rounded-2xl" style={{ background: "#0a85ea22", color: "#0a85ea" }}>
+      <div className="grid h-12 w-12 place-items-center rounded-2xl" style={{ background: "#6fa8dc22", color: "#6fa8dc" }}>
         <ShieldCheck size={22} />
       </div>
       <h2 className="mt-3 text-[19px] font-bold tracking-tight text-white">Link via Plaid</h2>
@@ -537,8 +537,8 @@ function PlaidConnectView({
 
       {status === "demo" && (
         <>
-          <div className="mt-4 flex items-start gap-2 rounded-2xl border border-amber-400/15 bg-amber-400/[0.06] p-3">
-            <AlertCircle size={14} className="mt-0.5 shrink-0 text-amber-400" />
+          <div className="mt-4 flex items-start gap-2 rounded-2xl border border-brass/15 bg-brass/[0.06] p-3">
+            <AlertCircle size={14} className="mt-0.5 shrink-0 text-brass" />
             <p className="text-[12px] leading-relaxed text-white/55">
               Connector is in <b className="text-white/75">demo mode</b> (no Plaid keys yet) — connecting loads a
               realistic sandbox portfolio so you can see the full flow. Drop free Plaid sandbox keys into{" "}
@@ -568,8 +568,8 @@ function PlaidConnectView({
       )}
 
       {status === "error" && (
-        <div className="mt-4 rounded-2xl border border-rose-400/15 bg-rose-400/[0.06] p-4">
-          <p className="text-[13px] font-semibold text-rose-300">Couldn't connect</p>
+        <div className="mt-4 rounded-2xl border border-down/15 bg-down/[0.06] p-4">
+          <p className="text-[13px] font-semibold text-down">Couldn't connect</p>
           <p className="mt-1 text-[12px] leading-relaxed text-white/55">{err || "Something went wrong with Plaid."}</p>
           <button onClick={() => setStatus("ready")} className="mt-3 w-full rounded-full bg-white/10 py-2.5 text-[13px] font-semibold text-white active:scale-95">
             Try again
@@ -583,7 +583,7 @@ function PlaidConnectView({
 function MiniSpinner({ label }: { label: string }) {
   return (
     <div className="mt-6 flex flex-col items-center py-8">
-      <Loader2 size={26} className="animate-spin text-violet-300" />
+      <Loader2 size={26} className="animate-spin text-brass" />
       <p className="mt-3 text-[13px] text-white/50">{label}</p>
     </div>
   );
