@@ -18,7 +18,7 @@ import { clearOverrides } from "../data/overrides";
 import { readRemoved, clearRemoved } from "../data/removed";
 import { PROFILES, readProfileId, writeProfileId, type ProfileId } from "../data/profiles";
 import { RATES_TO_USD, setRateToUSD, resetRates } from "../lib/currency";
-import { longDate, shortDate, daysAgo } from "../lib/format";
+import { longDate, shortDate, daysAgo, isoToday } from "../lib/format";
 import { Card, SectionTitle, cx } from "./ui";
 import { HelmMark } from "./Brand";
 import { getFxTimestamp, updateFxRates } from "../lib/fxFeed";
@@ -139,7 +139,7 @@ export function SettingsScreen({
         ? "just now"
         : new Date().getTime() - fxTimestamp < 86400000
           ? "today"
-          : daysAgo(new Date(fxTimestamp).toISOString());
+          : `${daysAgo(isoToday(new Date(fxTimestamp)))}d ago`;
 
   return (
     <div className="animate-fade-up space-y-7 px-4 pb-6 pt-2">

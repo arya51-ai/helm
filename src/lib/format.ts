@@ -60,6 +60,16 @@ function local(dateStr: string): Date {
   return new Date(`${dateStr}T00:00:00`);
 }
 
+/** Today's *local* calendar date as an ISO string (YYYY-MM-DD). Unlike
+ *  `new Date().toISOString().slice(0, 10)`, this doesn't roll to tomorrow in the evening for
+ *  negative-UTC-offset timezones — the whole app treats ISO dates as local (see `local()`). */
+export function isoToday(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = `${d.getMonth() + 1}`.padStart(2, "0");
+  const day = `${d.getDate()}`.padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function weekday(dateStr: string, long = false): string {
   return local(dateStr).toLocaleDateString("en-US", { weekday: long ? "long" : "short" });
 }

@@ -15,3 +15,14 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     navigator.serviceWorker.register('/sw.js').catch(() => {})
   })
 }
+
+// In dev, proactively tear down any service worker + caches left over from a prior
+// prod build/preview on this origin. Otherwise the stale SW serves a cached (often
+// blank) shell and HMR never reaches the page. Lets the dev server self-heal without
+// a manual "Clear site data".
+if ('serviceWorker' in navigator && import.meta.env.DEV) {
+  navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister()))
+  if ('caches' in window) {
+    caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)))
+  }
+}

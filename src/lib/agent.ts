@@ -2,6 +2,7 @@ import type { Business, Insight, PipItem } from "../types";
 import type { Metrics, EmpireSummary } from "./analytics";
 import { answerQuestion, type AskContext, type AskAnswer } from "./ask";
 import { hotelMetricsFor, type HotelMetrics } from "./hotelAnalytics";
+import { motelChannelStats, daysToSummerfest } from "./motelInsights";
 import { summarizeForecast, paceToGoal } from "./forecast";
 import { empireAnomalies } from "./anomalies";
 import { bakedBrief } from "./bakedBrief";
@@ -64,6 +65,45 @@ function summarizePip(items?: PipItem[]) {
   return { overdue, inProgress, upcoming, ...(next ? { nextItem: next.title, nextDeadline: next.deadline } : {}) };
 }
 
+// The independent-motel layer — what an owner-operator (Sam @ Northwood) actually reasons in:
+// occupancy, nightly rate (CAD), where the bookings come from, what the OTAs take, and the season.
+// Deliberately NO RevPAR Index / GOP / PIP — those are chain concepts that don't exist here.
+function motelBlock(b: Business, h: HotelMetrics) {
+  const s = motelChannelStats(b);
+  const hw = daysToSummerfest();
+  const c = b.channelMix;
+  return {
+    independent: true,
+    currency: "CAD",
+    rooms: b.rooms,
+    pms: b.pms,
+    occupancy: r2(h.monthOcc),
+    occToday: r2(h.todayOcc),
+    occVsExpected: r2(h.occVsExpected),
+    adrCad: r0(h.monthAdr),
+    adrTodayCad: r0(h.todayAdr),
+    revparCad: r0(h.monthRevpar),
+    revparTrend30: r2(h.revparTrend30),
+    occTrend7: r2(h.occTrend7),
+    directSharePct: c ? r2(c.direct) : undefined,
+    bookingComSharePct: c ? r2(c.bookingCom) : undefined,
+    expediaSharePct: c ? r2(c.expedia) : undefined,
+    ...(s
+      ? {
+          otaSharePct: r2(s.otaShare),
+          monthRoomRevenueCad: s.monthRoomRev,
+          monthCommissionCad: s.commission,
+          bookingComFeeCad: s.bookingComFee,
+          expediaFeeCad: s.expediaFee,
+          seasonCommissionCad: s.seasonCommission,
+          shift10pctToDirectMonthlyCad: s.shift10Monthly,
+          shift10pctToDirectSeasonCad: s.shift10Season,
+        }
+      : {}),
+    daysToSummerfestWeekend: hw.days,
+  };
+}
+
 // The hospitality KPI layer for a hotel — the same numbers HotelDetail shows, rounded for the
 // model: rate (ADR), volume (occupancy), the two folded together (RevPAR), share-of-market (RGI
 // vs the comp set), profitability (GOP/labor), 7-day momentum, and PIP pressure.
@@ -100,7 +140,7 @@ export function buildAgentContext(ctx: AskContext) {
       name: b.name,
       type: b.type,
       location: b.location,
-      currency: b.currency ?? "USD",
+      currency: b.currency ?? (b.independent ? "CAD" : "USD"),
       capitalDeployed: b.capitalDeployed,
       netMargin: b.netMargin != null ? r2(b.netMargin) : undefined,
       roic: m ? m.roic : undefined,
@@ -136,10 +176,14 @@ export function buildAgentContext(ctx: AskContext) {
         forecastNext30: fc ? r0(fc.total) : null,
       };
       // Hotels get a hospitality KPI layer alongside the generic operating metrics, so the COO
-      // reasons in RevPAR/RGI/occupancy terms — not just "revenue".
+      // reasons in RevPAR/RGI/occupancy terms — not just "revenue". Independent motels get the
+      // owner-operator layer instead (channels, OTA commission, season) under `.motel`.
       if (b.type === "hotel") {
         const h = hotelMetricsFor(b);
-        if (h) base.hotel = hotelBlock(b, h);
+        if (h) {
+          if (b.independent) base.motel = motelBlock(b, h);
+          else base.hotel = hotelBlock(b, h);
+        }
       }
       metricsBy[b.id] = base;
       const goal = goalFor(b.id);

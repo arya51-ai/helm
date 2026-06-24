@@ -8,13 +8,15 @@
  * and an AAHOA hotelier through the exact same app, each seeing only what's theirs.
  */
 
-export type ProfileId = "blank" | "independent" | "mixed" | "group" | "aahoa" | "fuel" | "multi";
+export type ProfileId = "blank" | "independent" | "mixed" | "group" | "aahoa" | "fuel" | "multi" | "northwood";
 
 export interface DemoProfile {
   id: ProfileId;
   label: string;
   sub: string;
   blurb: string;
+  /** First name Helm greets in this persona (defaults to the app owner). */
+  owner?: string;
   /** Sample operating/portfolio business ids to include, or "all". */
   businesses: "all" | string[];
   /** Sample hotel ids to include, "all", or [] for none. */
@@ -26,6 +28,18 @@ export interface DemoProfile {
 }
 
 export const PROFILES: DemoProfile[] = [
+  {
+    id: "northwood",
+    label: "Sam · Northwood Motel",
+    sub: "Independent motel · Pinecrest, ON",
+    owner: "Sam",
+    blurb:
+      "A 21-room independent motel on the lake region, run off a phone through Little Hotelier. Helm drops the chain dialect (RevPAR Index, GOP, brand PIP) and reads the business an owner-operator actually lives in: how full tonight, the nightly rate, where the bookings come from, and what Booking.com & Expedia are taking. The brief leads with commission leakage and the Summerfest Weekend pricing window. The design-partner demo.",
+    businesses: [],
+    hotels: ["northwood-motel"],
+    fuel: [],
+    units: [],
+  },
   {
     id: "blank",
     label: "Blank slate",
@@ -108,7 +122,7 @@ const LS_KEY = "helm:profile:v1";
 export function readProfileId(): ProfileId {
   try {
     const v = localStorage.getItem(LS_KEY);
-    if (v === "blank" || v === "independent" || v === "mixed" || v === "group" || v === "aahoa" || v === "fuel" || v === "multi") return v;
+    if (v === "blank" || v === "independent" || v === "mixed" || v === "group" || v === "aahoa" || v === "fuel" || v === "multi" || v === "northwood") return v;
   } catch {
     /* ignore */
   }

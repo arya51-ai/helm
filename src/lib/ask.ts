@@ -1,7 +1,8 @@
 import type { Business, Insight } from "../types";
 import type { Metrics, EmpireSummary } from "./analytics";
 import { hotelMetricsFor } from "./hotelAnalytics";
-import { usd, usdCompact, pct, signedPct, signedUsd, weekday, daysAgo } from "./format";
+import { motelChannelStats, daysToSummerfest } from "./motelInsights";
+import { usd, usdCompact, money, pct, signedPct, signedUsd, weekday, daysAgo } from "./format";
 
 /**
  * "Ask Helm" — a natural-language layer over the owner's data. Intentionally
@@ -41,6 +42,19 @@ export const SUGGESTED_QUESTIONS = [
 export function suggestedQuestionsFor(ctx: AskContext): string[] {
   const hotels = ctx.businesses.filter((b) => b.type === "hotel" && b.hotelSeries?.length);
   if (!hotels.length) return SUGGESTED_QUESTIONS;
+
+  // An independent motel owner asks owner-operator questions — fees, pricing, the season — not
+  // RevPAR-Index questions.
+  if (hotels.some((h) => h.independent)) {
+    return [
+      "How much am I paying Booking.com?",
+      "Should I raise rates for the long weekend?",
+      "How's my summer pacing?",
+      "How full am I this week?",
+      "What needs me today?",
+      "What's my net worth?",
+    ];
+  }
 
   // Pick the property with the lowest RGI to headline the "why is X trailing?" prompt.
   const ranked = hotels
@@ -92,10 +106,90 @@ function midweekSplit(b: Business): { weekday: number; weekend: number } | null 
 }
 
 /**
+ * Independent-motel answer — the owner-operator's language (occupancy, nightly rate in CAD,
+ * booking channels, OTA commission, the season). Mirrors motelInsights.ts so the offline rule
+ * engine reads the same story the live model and the cards do. Money is CAD.
+ */
+function motelAnswer(biz: Business, q: string): AskAnswer {
+  const m = hotelMetricsFor(biz);
+  const s = motelChannelStats(biz);
+  const name = biz.shortName ?? biz.name;
+  const ca = (n: number) => money(n, "CAD");
+  if (!m || !s) return { text: `${name} doesn't have its channel mix loaded yet.`, businessId: biz.id };
+
+  // Fees / commission / OTAs — the hot button
+  if (/\b(booking\.?com|expedia|ota|otas|commission|fee|fees|cut|channel|where.*money|leak)\b/.test(q)) {
+    return {
+      text: `${name}: the OTAs took ${ca(s.commission)} last month — ${ca(s.bookingComFee)} to Booking.com, ${ca(
+        s.expediaFee,
+      )} to Expedia (${pct(s.otaShare, 0)} of your rooms). At summer pace that's ~${ca(s.seasonCommission)} across Jun–Sep. You're ${pct(
+        s.directShare,
+        0,
+      )} direct already — move 1 in 10 OTA stays to your own site or phone and you keep ~${ca(s.shift10Monthly)}/mo.`,
+      businessId: biz.id,
+      metric: ca(s.commission),
+      metricUp: false,
+    };
+  }
+  // Pricing / Summerfest / long weekend / raise rates
+  if (/\b(rate|rates|price|pricing|raise|charg|summerfest|long weekend|weekend|holiday|peak|minimum)\b/.test(q)) {
+    const hw = daysToSummerfest();
+    const lift = 15 * (biz.rooms ?? 22) * 3;
+    return {
+      text: `Summerfest Weekend (Aug 1–4) is ${hw.days} days out and the island sells out — pure pricing power. Hold a 2-night minimum and lift Fri/Sat; even +${ca(
+        15,
+      )}/night across ${biz.rooms ?? 22} rooms is ~${ca(lift)} over the long weekend. You're at ${ca(m.todayAdr)} and ${pct(
+        m.todayOcc,
+        0,
+      )} full tonight. Set it in ${biz.pms ?? "your channel manager"} before the OTAs anchor it low.`,
+      businessId: biz.id,
+      metric: `${hw.days}d to Summerfest`,
+      metricUp: true,
+    };
+  }
+  // Season / summer / pacing / cash
+  if (/\b(season|summer|pacing|pace|year|winter|cash|slow|trend|headed|outlook)\b/.test(q)) {
+    return {
+      text: `${name}: you're entering peak — pacing ${signedPct(m.revparTrend30, 0)} over 30 days, ${pct(
+        m.todayOcc,
+        0,
+      )} full tonight at ${ca(m.todayAdr)}. Jun–Sep is the bulk of your year, so bank it: hold weekend rate discipline and don't discount into a sellout.`,
+      businessId: biz.id,
+      metric: signedPct(m.revparTrend30, 0),
+      metricUp: m.revparTrend30 >= 0,
+    };
+  }
+  // Occupancy / how full
+  if (/\b(occupanc|occ\b|full|empty|vacan|rooms?|busy|sold)\b/.test(q)) {
+    return {
+      text: `${name}: ${pct(m.monthOcc, 0)} full over 30 days (${pct(m.todayOcc, 0)} tonight) at ${ca(
+        m.monthAdr,
+      )} avg rate. Weekends carry it — midweek is where a small deal earns its keep.`,
+      businessId: biz.id,
+      metric: pct(m.todayOcc, 0),
+      metricUp: m.occTrend7 >= 0,
+    };
+  }
+  // Default — lead with the commission story (his hot button)
+  return {
+    text: `${name}: ${pct(m.todayOcc, 0)} full tonight at ${ca(m.todayAdr)}. The thing to watch is OTA commission — ${ca(
+      s.commission,
+    )} to Booking.com & Expedia last month (~${ca(s.seasonCommission)} for the season). Shift 1 in 10 OTA stays to direct and that's ~${ca(
+      s.shift10Monthly,
+    )}/mo back in your pocket.`,
+    businessId: biz.id,
+    metric: ca(s.commission),
+    metricUp: false,
+  };
+}
+
+/**
  * Hotel-fluent answer for one property. Mirrors the rate-vs-volume / RGI-vs-comp
  * phrasing in hotelInsights.ts so Ask Helm reads the same language as the cards.
  */
 function hotelAnswer(biz: Business, q: string): AskAnswer {
+  // Independent motels read in owner-operator language, not chain RGI/GOP.
+  if (biz.independent) return motelAnswer(biz, q);
   const m = hotelMetricsFor(biz);
   const name = biz.shortName ?? biz.name;
   if (!m) {
@@ -265,6 +359,16 @@ export function answerQuestion(raw: string, ctx: AskContext): AskAnswer {
     if (top)
       return { text: `${top.title}. ${top.detail}`, businessId: top.businessId, metric: top.metric, metricUp: top.metricUp };
     return { text: "Nothing urgent — everything's tracking close to normal today." };
+  }
+
+  // 1c) Independent-motel questions that didn't name the property (fees, pricing, season, occupancy).
+  const indMotel = ctx.businesses.find((b) => b.independent && b.hotelSeries?.length);
+  if (
+    indMotel &&
+    !biz &&
+    /\b(booking\.?com|expedia|ota|otas|commission|fee|fees|direct|rate|rates|price|pricing|raise|summerfest|weekend|occupanc|full|summer|season|pacing|pace|cash)\b/.test(q)
+  ) {
+    return motelAnswer(indMotel, q);
   }
 
   // 1b) Portfolio/empire-level hotel questions (no single property matched): which property needs me, where is RevPAR headed.

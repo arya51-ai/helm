@@ -1,6 +1,8 @@
 import type { AskContext } from "./ask";
-import { usd, usdCompact, pct } from "./format";
+import { usd, usdCompact, money, pct, signedPct } from "./format";
 import { momentum } from "./patterns";
+import { hotelMetricsFor } from "./hotelAnalytics";
+import { motelChannelStats, daysToSummerfest } from "./motelInsights";
 
 /**
  * The baked "Helm's read" — the morning narrative an AI COO would write, composed from the
@@ -11,6 +13,38 @@ import { momentum } from "./patterns";
  */
 export function bakedBrief(ctx: AskContext): string {
   const { businesses, metricsBy, empire, idleCash } = ctx;
+
+  // An independent motel gets its own owner-operator read — commission leakage + the seasonal
+  // pricing window, in CAD — instead of the ROIC/idle-cash framing built for a multi-shop empire.
+  const motel = businesses.find((b) => b.independent && b.hotelSeries?.length);
+  if (motel) {
+    const m = hotelMetricsFor(motel);
+    const s = motelChannelStats(motel);
+    if (m && s) {
+      const ca = (n: number) => money(n, "CAD");
+      const name = motel.shortName ?? motel.name;
+      const hw = daysToSummerfest();
+      const parts: string[] = [];
+      parts.push(
+        `${name} is ${pct(m.todayOcc, 0)} full tonight at ${ca(m.todayAdr)}, pacing ${signedPct(
+          m.revparTrend30,
+          0,
+        )} as summer lands — your strongest stretch of the year.`,
+      );
+      parts.push(
+        `The one to watch is OTA commission: Booking.com and Expedia took ${ca(s.commission)} last month, ~${ca(
+          s.seasonCommission,
+        )} across your season. You're ${pct(s.directShare, 0)} direct, so moving even 1 in 10 OTA stays to your own site is ~${ca(
+          s.shift10Monthly,
+        )}/mo back.`,
+      );
+      parts.push(
+        `And Summerfest Weekend is ${hw.days} days out — the island sells out, so hold rate and put a 2-night minimum on it.`,
+      );
+      return parts.join(" ");
+    }
+  }
+
   const ops = businesses.filter((b) => b.type !== "portfolio");
   if (!ops.length) return "";
 

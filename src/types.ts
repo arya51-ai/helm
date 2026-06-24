@@ -75,6 +75,18 @@ export interface Business {
   /** Hotel-only: true when GOP & labor were estimated from default margins (no P&L) — render
    *  the margin/labor numbers as estimates, not measured costs. */
   costEstimated?: boolean;
+  /** Independent property (a motel/inn, not a flagged chain): no brand PIP, no STR comp set.
+   *  Flips the hospitality UI + AI from chain language (RevPAR Index, GOP, PIP) to the read an
+   *  owner-operator actually lives in — occupancy, nightly rate, booking channels & OTA fees. */
+  independent?: boolean;
+  /** Independent-only: where the bookings come from + what each OTA charges — the data behind the
+   *  commission-leakage read. */
+  channelMix?: ChannelMix;
+  /** Independent-only: the property the owner sends through a channel manager (e.g. Little
+   *  Hotelier), shown as the live "synced from" source. */
+  pms?: string;
+  /** Persona owner's first name — greets them by name on the Brief ("Good evening, Sam"). */
+  ownerName?: string;
   /** Fuel-only: daily fuel + c-store KPIs keyed by ISO date. */
   fuelSeries?: FuelDay[];
   /** Fuel-only: number of fueling positions (pumps). */
@@ -142,6 +154,19 @@ export interface HotelDay {
   compSetRevpar: number;
   /** RevPAR Index (RGI) = property RevPAR / comp set RevPAR × 100 */
   rgi: number;
+}
+
+/** Booking-source distribution for an independent property + the commission each paid channel
+ *  charges. Shares are fractions of room revenue (direct + bookingCom + expedia + other ≈ 1);
+ *  the *Rate fields are the OTA's cut. This is the data behind "Booking.com took CA$X". */
+export interface ChannelMix {
+  direct: number;
+  bookingCom: number;
+  expedia: number;
+  other: number;
+  bookingComRate: number;
+  expediaRate: number;
+  otherRate: number;
 }
 
 /** Property Improvement Plan item — brand-mandated renovations/upgrades. */

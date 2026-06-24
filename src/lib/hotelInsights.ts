@@ -1,5 +1,6 @@
 import type { Business, Insight } from "../types";
 import { hotelMetricsFor, type HotelMetrics } from "./hotelAnalytics";
+import { buildMotelInsights } from "./motelInsights";
 import { usd, usdCompact, pct, signedPct } from "./format";
 
 export function buildHotelInsights(hotels: Business[]): Insight[] {
@@ -7,6 +8,12 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
   if (!hotels.length) return out;
 
   for (const h of hotels) {
+    // Independent motels speak a different language — channels, OTA commission, seasonal pricing —
+    // not the chain dialect (RGI, GOP, PIP) the rest of this engine writes. Route them out.
+    if (h.independent) {
+      out.push(...buildMotelInsights(h));
+      continue;
+    }
     const m = hotelMetricsFor(h);
     if (!m) continue;
     const name = h.shortName ?? h.name;
@@ -149,8 +156,9 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
   }
 
   // ── Portfolio-wide: best vs worst RevPAR property (the 2-motel cross-property unlock) ──
-  if (hotels.length >= 2) {
+  if (hotels.filter((h) => !h.independent).length >= 2) {
     const ranked = hotels
+      .filter((h) => !h.independent)
       .map((h) => ({ h, m: hotelMetricsFor(h) }))
       .filter((x) => x.m != null)
       .sort((a, b) => b.m!.monthRevpar - a.m!.monthRevpar);
@@ -173,6 +181,7 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
 
   // ── Weekend occupancy opportunity ──
   for (const h of hotels) {
+    if (h.independent) continue; // motels run leisure-strong weekends — chain "weekend promo" doesn't apply
     const hs = h.hotelSeries;
     if (!hs || hs.length < 14) continue;
     const name = h.shortName ?? h.name;

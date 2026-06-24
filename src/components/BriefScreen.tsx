@@ -14,7 +14,7 @@ import type { Business, Insight, InsightKind } from "../types";
 import type { Metrics, EmpireSummary } from "../lib/analytics";
 import type { DataSource } from "../data/source";
 import { hotelPortfolioMetrics } from "../lib/hotelAnalytics";
-import { usd, usdCompact, pct, longDate, daysAgo, weekday, shortDate } from "../lib/format";
+import { usd, usdCompact, money, pct, longDate, daysAgo, weekday, shortDate } from "../lib/format";
 import { list as listActions, setStatus as setActionStatus, type TrackedAction } from "../data/actions";
 import { Card, Delta, Sparkline, SectionTitle, cx } from "./ui";
 import { TrendRibbon } from "./charts";
@@ -190,6 +190,7 @@ export function BriefScreen({
   insights,
   source,
   aiBrief,
+  owner,
   onOpenBusiness,
   onToast,
   onSeeAll,
@@ -197,6 +198,7 @@ export function BriefScreen({
   onAsk,
   onDraft,
   onOpenHotels,
+  onOpenHotel,
   onOpenCompare,
 }: {
   businesses: Business[];
@@ -206,6 +208,8 @@ export function BriefScreen({
   source: DataSource;
   /** Claude-written morning read (null when the model isn't configured → falls back to the rule cards). */
   aiBrief?: string | null;
+  /** Persona owner's first name, for the greeting + avatar. */
+  owner: string;
   onOpenBusiness: (id: string) => void;
   onToast: (msg: string) => void;
   onSeeAll: () => void;
@@ -214,12 +218,16 @@ export function BriefScreen({
   onDraft: (insight: Insight) => void;
   /** Jump to the hospitality command center (only meaningful when hotels exist). */
   onOpenHotels?: () => void;
+  /** Open one property's deep dive directly (used for a single independent motel). */
+  onOpenHotel?: (id: string) => void;
   /** Open the same-brand head-to-head comparison for a unit-compare insight. */
   onOpenCompare?: (insight: Insight) => void;
 }) {
   const ops = businesses.filter((b) => b.type !== "hotel");
   const hotels = businesses.filter((b) => b.type === "hotel");
   const hotelPortfolio = hotels.length ? hotelPortfolioMetrics(hotels) : null;
+  // A lone independent motel reads as itself, not a "portfolio" — tapping it opens its own view.
+  const soloMotel = hotels.length === 1 && hotels[0].independent ? hotels[0] : null;
   const today = new Date();
   const hour = today.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -235,6 +243,10 @@ export function BriefScreen({
       : lag === 1
         ? "Revenue yesterday · all businesses"
         : `Revenue · ${weekday(empire.asOf)} ${shortDate(empire.asOf)} · all businesses`;
+  // A single CAD motel reads in CA$ and as itself, not "all businesses".
+  const fmtBig = (n: number) => (soloMotel ? money(n, "CAD") : usd(n));
+  const fmtC = (n: number) => (soloMotel ? "CA" + usdCompact(n) : usdCompact(n));
+  const revLabelFinal = soloMotel ? `${soloMotel.shortName} · last night` : revLabel;
 
   return (
     <div className="animate-fade-up space-y-7 px-4 pb-6 pt-2">
@@ -247,7 +259,7 @@ export function BriefScreen({
             className="grid h-9 w-9 place-items-center rounded-full text-[14px] font-bold text-white shadow-lg active:scale-90"
             style={{ background: "linear-gradient(135deg,#e0ae49,#0a263e)" }}
           >
-            A
+            {owner[0]}
           </button>
         </div>
         <header className="px-1">
@@ -265,7 +277,7 @@ export function BriefScreen({
               {source === "real" ? "Live" : "Sample data"}
             </span>
           </div>
-          <h1 className="mt-0.5 text-[26px] font-bold tracking-tight text-white">{greeting}, Arya</h1>
+          <h1 className="mt-0.5 text-[26px] font-bold tracking-tight text-white">{greeting}, {owner}</h1>
         </header>
       </div>
 
@@ -284,10 +296,10 @@ export function BriefScreen({
       <Card className="overflow-hidden p-5">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-[12px] font-medium text-white/45">{revLabel}</p>
+            <p className="text-[12px] font-medium text-white/45">{revLabelFinal}</p>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-[34px] font-bold tracking-tight text-white tabular-nums">
-                {usd(empire.revenueToday)}
+                {fmtBig(empire.revenueToday)}
               </span>
               <Delta value={empire.revenueDayChange} />
             </div>
@@ -297,11 +309,11 @@ export function BriefScreen({
           <TrendRibbon data={empire.combinedSeries} color="#e0ae49" height={110} />
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 border-t border-white/[0.06] pt-4">
-          <Stat label="This week" value={usdCompact(empire.weekToDate)} />
-          <Stat label="This month" value={usdCompact(empire.last30)} />
+          <Stat label="This week" value={fmtC(empire.weekToDate)} />
+          <Stat label="This month" value={fmtC(empire.last30)} />
           <Stat
             label="Net worth"
-            value={usdCompact(empire.netWorth)}
+            value={fmtC(empire.netWorth)}
             accent="text-brass"
           />
         </div>
@@ -351,12 +363,33 @@ export function BriefScreen({
 
       {/* Businesses quick row */}
       <section>
-        <SectionTitle right={hotelPortfolio ? <span className="text-[12px] text-white/40">{ops.length + hotels.length} total</span> : undefined}>
-          {hotelPortfolio ? "Your portfolio" : "Your businesses"}
+        <SectionTitle right={hotelPortfolio && !soloMotel ? <span className="text-[12px] text-white/40">{ops.length + hotels.length} total</span> : undefined}>
+          {soloMotel ? "Your motel" : hotelPortfolio ? "Your portfolio" : "Your businesses"}
         </SectionTitle>
         <div className="space-y-3">
-          {/* Hotels collapse into one portfolio card so 5 properties don't flood the brief. */}
-          {hotelPortfolio && (
+          {/* A lone independent motel reads as itself; multiple properties collapse into a portfolio card. */}
+          {hotelPortfolio && soloMotel && (
+            <Card className="flex items-center gap-3 p-3.5" onClick={() => onOpenHotel?.(soloMotel.id)}>
+              <div
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-[15px] font-bold"
+                style={{ background: `${soloMotel.accent}22`, color: soloMotel.accent }}
+              >
+                {soloMotel.name[0]}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-semibold text-white">{soloMotel.name}</p>
+                <p className="truncate text-[12px] text-white/40">
+                  {soloMotel.location} · {soloMotel.rooms} rooms · {pct(hotelPortfolio.avgOccupancy, 0)} full
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[14px] font-semibold text-white tabular-nums">{money(hotelPortfolio.avgAdr, "CAD")}</p>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-white/35">avg rate</p>
+              </div>
+              <ChevronRightIcon size={16} className="text-white/25" />
+            </Card>
+          )}
+          {hotelPortfolio && !soloMotel && (
             <Card className="flex items-center gap-3 p-3.5" onClick={onOpenHotels}>
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-brass/15 text-brass">
                 <Building2 size={20} />

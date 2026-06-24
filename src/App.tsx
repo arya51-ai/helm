@@ -9,6 +9,7 @@ import {
   BatteryFull,
   SignalHigh,
   Building2,
+  BedDouble,
   type LucideIcon,
 } from "lucide-react";
 import { BUSINESSES, EMPIRE } from "./data/businesses";
@@ -34,6 +35,7 @@ import { BusinessesScreen } from "./components/BusinessesScreen";
 import { BusinessDetail } from "./components/BusinessDetail";
 import { HotelCommandCenter } from "./components/HotelCommandCenter";
 import { HotelDetail } from "./components/HotelDetail";
+import { MotelDetail } from "./components/MotelDetail";
 import { FuelDetail } from "./components/FuelDetail";
 import { CompareUnits } from "./components/CompareUnits";
 import { AddBusinessSheet } from "./components/AddBusinessSheet";
@@ -78,6 +80,11 @@ export default function App() {
   const hasHotels = hotels.length > 0;
   const hotelPortfolio = useMemo(() => hotelPortfolioMetrics(hotels), [hotels]);
   const hotelInsights = useMemo(() => buildHotelInsights(hotels), [hotels]);
+  // A single independent motel (Sam) gets its own owner-operator view — it opens straight into
+  // MotelDetail and skips the chain "command center", which is built for multi-property portfolios.
+  const soloMotel = hotels.length === 1 && hotels[0].independent ? hotels[0] : null;
+  // Persona owner — greet whoever's holding it by name (a hotel persona carries its owner's name).
+  const ownerName = useMemo(() => businesses.find((b) => b.ownerName)?.ownerName ?? EMPIRE.owner, [businesses]);
 
   // Fuel stations are first-class businesses (type: "fuel") with their own COO read
   // (gallons, CPG, c-store attach). They live in the normal Businesses flow with a
@@ -259,13 +266,15 @@ export default function App() {
               insights={insights}
               source={dataSource}
               aiBrief={aiBrief}
+              owner={ownerName}
               onOpenBusiness={openBusiness}
               onToast={showToast}
               onSeeAll={() => setAllInsights(true)}
               onProfile={() => setTab("settings")}
               onAsk={() => setAskOpen(true)}
               onDraft={setActionInsight}
-              onOpenHotels={() => setTab("hotels")}
+              onOpenHotels={() => (soloMotel ? setOpenHotel(soloMotel.id) : setTab("hotels"))}
+              onOpenHotel={(id) => setOpenHotel(id)}
               onOpenCompare={openCompareFor}
             />
           )}
@@ -305,7 +314,7 @@ export default function App() {
           )}
           {tab === "settings" && (
             <SettingsScreen
-              owner={EMPIRE.owner}
+              owner={ownerName}
               businesses={businesses}
               dataSource={dataSource}
               asOf={empire.asOf}
@@ -325,7 +334,9 @@ export default function App() {
           <div className="flex items-center">
             <div className="flex flex-1 items-center justify-around gap-1">
               <NavButton icon={Home} label="Brief" active={tab === "brief"} onClick={() => setTab("brief")} />
-              {hasHotels ? (
+              {soloMotel ? (
+                <NavButton icon={BedDouble} label="Motel" active={openHotel === soloMotel.id} onClick={() => setOpenHotel(soloMotel.id)} />
+              ) : hasHotels ? (
                 <NavButton icon={Building2} label="Hotels" active={tab === "hotels"} onClick={() => setTab("hotels")} />
               ) : (
                 <NavButton icon={Store} label="Businesses" active={tab === "businesses"} onClick={() => setTab("businesses")} />
@@ -339,7 +350,7 @@ export default function App() {
               <Plus size={24} strokeWidth={2.6} />
             </button>
             <div className="flex flex-1 items-center justify-around gap-1">
-              {hasHotels && (
+              {hasHotels && !soloMotel && (
                 <NavButton icon={Store} label="Businesses" active={tab === "businesses"} onClick={() => setTab("businesses")} />
               )}
               <NavButton icon={PieChart} label="Net worth" active={tab === "empire"} onClick={() => setTab("empire")} />
@@ -351,7 +362,7 @@ export default function App() {
                   )}
                   style={{ background: "linear-gradient(135deg,#e0ae49,#0a263e)" }}
                 >
-                  A
+                  {ownerName[0]}
                 </span>
                 <span className={cx("text-[10px] font-medium", tab === "settings" ? "text-white" : "text-white/35")}>
                   You
@@ -364,7 +375,14 @@ export default function App() {
         {/* Overlays */}
         {openHotel && (() => {
           const h = hotels.find((x) => x.id === openHotel);
-          return h ? <HotelDetail business={h} onClose={() => setOpenHotel(null)} /> : null;
+          if (!h) return null;
+          // Independent motels get the owner-operator view (occupancy / rate / channels / OTA fees);
+          // flagged chain properties get the RevPAR-Index / GOP / PIP command view.
+          return h.independent ? (
+            <MotelDetail business={h} onClose={() => setOpenHotel(null)} />
+          ) : (
+            <HotelDetail business={h} onClose={() => setOpenHotel(null)} />
+          );
         })()}
         {compareGroup && <CompareUnits group={compareGroup} onClose={() => setCompareGroup(null)} />}
         {business && business.type === "fuel" && (

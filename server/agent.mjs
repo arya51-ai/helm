@@ -80,6 +80,12 @@ HOTEL KPIs (when a business has a .hotel block, read it in hospitality terms —
 - Reconcile rate vs volume before prescribing: high ADR + soft occupancy + RGI under 100 usually means priced above what it's filling → consider trimming BAR (Best Available Rate) on the weak days to win occupancy. Strong occupancy + low ADR may mean rate is being left on the table → push rate.
 - gopMargin and laborPct are the profit read; labor is a hotel's biggest controllable cost. PIP is brand-mandated capital work — overdue items risk franchise compliance and brand standing, so flag them.
 
+INDEPENDENT MOTEL (when a business has a .motel block — an owner-operated motel/inn like Northwood Motel in Pinecrest, the lake region — read it in THAT owner's language, NOT chain language):
+- These owners do not think in RevPAR Index, GOP, or brand PIP. There is no flag, no comp set, no STR report — never use those terms here. Lead with what they live in: how full tonight (occupancy), the nightly rate (ADR), and the two levers they actually pull — price, and where the booking comes from.
+- Channels are the heart of it. directSharePct is the prize: no commission, the guest is theirs to bring back. bookingComSharePct / expediaSharePct / otaSharePct flow through OTAs that take a cut. monthCommissionCad is the real money the OTAs took in the last 30 days; bookingComFeeCad / expediaFeeCad split it. The single highest-leverage motel move is shifting OTA demand to direct — shift10pctToDirectMonthlyCad and shift10pctToDirectSeasonCad quantify moving 1 in 10 OTA stays to direct. Lead with this whenever they ask about fees, margin, commission, or "where's my money going".
+- Seasonality is everything on a tourist island: Jun–Sep is the bulk of the whole year. daysToSummerfestWeekend counts down to Summerfest Weekend (Aug 1–4), Pinecrest's biggest event — the town sells out, so it is pure pricing power: hold rate, put a 2-night minimum on it. Treat the other long weekends the same way.
+- The data syncs from their channel manager (pms, e.g. Little Hotelier) — reference "from Little Hotelier" naturally. ALL .motel money is in Canadian dollars: say CA$ (or just $) and NEVER convert it to USD.
+
 HARD RULES:
 - Use ONLY the numbers present in <owner_state>. Never invent, estimate, or round in a figure that isn't given. If you genuinely don't have a number, say so plainly rather than guessing.
 - Be specific and prescriptive: name the business, cite the actual number, state the action. The owner should finish reading knowing exactly what to do next.
@@ -91,7 +97,9 @@ HARD RULES:
 STYLE EXAMPLES (shape, not content to copy):
 Q: "What needs me today?" → "Riverside ran 22% below a normal Tuesday — $2,980 vs a typical $3,800. The gap's in the evening; worth a text to your closer. Everything else is tracking normal."
 Q: "Where should I put my cash?" → "Into Riverside. It returns ~37% on the capital in it vs ~9% in your portfolio. Your $42k of idle cash would earn about $11,800/yr more there than left in the market."
-Q: "Why is the Dublin property trailing?" → "RGI's at 92 — you're winning rate but losing occupancy midweek. ADR's strong at $148, but Tue/Wed occupancy is dragging RevPAR under the comp set. Trim BAR ~6% Tue/Wed and push the midweek corporate rate; that's where the share is leaking."`;
+Q: "Why is the Dublin property trailing?" → "RGI's at 92 — you're winning rate but losing occupancy midweek. ADR's strong at $148, but Tue/Wed occupancy is dragging RevPAR under the comp set. Trim BAR ~6% Tue/Wed and push the midweek corporate rate; that's where the share is leaking."
+Q (Northwood Motel): "How much am I paying Booking.com?" → "About CA$2,700 last month — Booking.com is a third of your rooms at a 15% cut, with Expedia another ~CA$1,400 on top. That's roughly CA$17k across your Jun–Sep season. You're already 40% direct, so it's movable: a 'book direct' card at checkout and a small repeat-guest rate, and shifting just 1 in 10 OTA stays to direct puts ~CA$800/mo back in your pocket."
+Q (Northwood Motel): "Should I raise rates for the long weekend?" → "Yes — Summerfest's 41 days out and the island sells out that weekend. You're still showing shoulder rates into it. Put a 2-night minimum on Aug 1–4 and lift Fri/Sat; even +CA$15 a night across 22 rooms is ~CA$1,000 over the weekend. Set it in Little Hotelier now, before the OTAs anchor it low."`;
 
 // ── TOOLS: the brain computes on EXACT numbers ─────────────────────────────────
 // Appended to the SYSTEM prefix (kept as its own cache-stable string). Tells the model the
@@ -384,7 +392,7 @@ export async function handleBrief({ context, env: e = env() }) {
   try {
     const client = await anthropic();
     const system = [{ type: "text", text: SYSTEM_WITH_TOOLS, cache_control: { type: "ephemeral" } }];
-    const instruction = `Write this morning's brief for the owner: 2–4 short sentences. Open by greeting them by name and orienting on the empire (combined revenue and how it's tracking). Then call out the single most important thing that needs them today and what to do about it. If something's genuinely good, you can note it in one clause. Prioritize across ALL businesses and the portfolio — lead with whatever matters most. No lists, no headers, just the read.`;
+    const instruction = `Write the owner's brief for right now: 2–4 short sentences. Open by greeting them by name (do NOT assume a time of day — no "Morning"/"Evening" unless you know it) and orienting on the business (revenue and how it's tracking). Then call out the single most important thing that needs them today and what to do about it. If something's genuinely good, you can note it in one clause. Prioritize across everything they run — lead with whatever matters most. No lists, no headers, just the read.`;
     const seed = [{ role: "user", content: userContent(context, instruction) }];
 
     const { messages } = await runToolLoop({

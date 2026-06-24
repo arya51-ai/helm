@@ -1,6 +1,7 @@
 import type { Business } from "../types";
 import { buildSampleBusinesses } from "./businesses";
 import { buildSampleHotels } from "./hotels";
+import { buildNorthwoodMotel } from "./northwood";
 import { buildSampleStations } from "./fuel";
 import { buildDevUnits } from "./multiUnit";
 import { extendSeriesToToday } from "./rng";
@@ -134,7 +135,9 @@ export async function loadBusinesses(): Promise<{ businesses: Business[]; source
   // set is what flips on the hospitality surfaces downstream.
   const profile = profileById(readProfileId());
   const sampleBiz = buildSampleBusinesses();
-  const sampleHotels = buildSampleHotels();
+  // Northwood rides alongside the seeded chain hotels in the sample set; the persona's include-list
+  // (`hotels: ["northwood-motel"]`) is what actually surfaces it.
+  const sampleHotels = [...buildSampleHotels(), buildNorthwoodMotel()];
   const sampleStations = buildSampleStations();
   const sampleUnits = buildDevUnits();
   const MOCK = [
