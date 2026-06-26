@@ -12,7 +12,8 @@
 //   GET  /api/agent/status → { available:true, askModel, briefModel }   (false ⇒ brain off)
 //   POST /api/agent/ask    → SSE: one+ `data:{"t":"…"}` text frames, then `data:{"done":true}`
 //                            (a JSON `{available:false}` body ⇒ fell back to rules)
-//   POST /api/agent/brief  → { available:true, text:"…" }               (non-empty narrative)
+//   POST /api/agent/brief  → { available:true, text:"…" } (maker wrote) | { available:true, skipped:true }
+//                            (cost gate judged nothing material — STILL live). { available:false }/{error} ⇒ off/broken.
 //
 // Uses global fetch (Node 18+). No deps.
 
@@ -42,6 +43,8 @@ const context = {
   empire: { revenueToday: 4620, netWorth: 410000, investments: 88000, cash: 42000, businessEquity: 210000, asOf: "2026-06-19" },
   idleCash: 42000,
   insights: [{ kind: "alert", title: "Riverside running below a normal day", detail: "Today is ~22% under a typical same-weekday.", priority: 90 }],
+  // A σ-scored anomaly so the brief's material-change gate (server/agent.mjs) unambiguously fires the maker.
+  anomalies: [{ businessId: "smoke", business: "Riverside", when: "2026-06-19", kind: "dip", sigma: -2.1, vsExpected: -0.22, actual: 2980, expected: 3800, runLength: 1 }],
 };
 
 const TIMEOUT_MS = 60000; // the brief runs Opus with extended thinking — give it room
@@ -160,7 +163,7 @@ async function checkBrief() {
     const res = await fetch(`${base}/api/agent/brief`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ context }),
+      body: JSON.stringify({ context, previousBrief: null }),
       signal: t.signal,
     });
     if (!res.ok) return fail("brief", `HTTP ${res.status} from /api/agent/brief`);
@@ -171,14 +174,20 @@ async function checkBrief() {
       return fail("brief", "response was not JSON");
     }
     if (body && body.available === false) {
-      return fail("brief  non-empty text", "got {available:false} — brain NOT live, fell back to baked brief");
+      return fail("brief  live", "got {available:false} — brain NOT live, fell back to baked brief");
     }
     if (body && body.error) {
-      return fail("brief  non-empty text", `brain errored: ${String(body.error).slice(0, 160)}`);
+      return fail("brief  live", `brain errored: ${String(body.error).slice(0, 160)}`);
+    }
+    // Post-gate contract: the brief is cost-gated (server/agent.mjs). A LIVE brain returns EITHER a
+    // freshly-written brief (text) OR {skipped:true} when the checker judged nothing material changed.
+    // Both prove the brain is on; only {available:false}/{error} mean it's off or broken.
+    if (body && body.skipped) {
+      return pass("brief  live", `cost gate skipped the maker (reason: ${body.reason || "?"}) — brain is live`);
     }
     const text = String(body?.text || "").trim();
-    if (!text) return fail("brief  non-empty text", "empty text in response");
-    pass("brief  non-empty text", `${text.length} chars — "${text.slice(0, 60).replace(/\s+/g, " ")}…"`);
+    if (!text) return fail("brief  live", "available:true but no text and not skipped — unexpected shape");
+    pass("brief  live", `${text.length} chars${body.model ? ` via ${body.model}` : ""} — "${text.slice(0, 60).replace(/\s+/g, " ")}…"`);
   } catch (e) {
     fail("brief  non-empty text", `request failed: ${e?.message || e}`);
   } finally {

@@ -1,0 +1,30 @@
+{
+  "name": "Brief leads with the real anomaly, cites the number",
+  "why": "With a genuine σ-anomaly present (Riverside -22% vs a normal day), the brief maker must lead with Riverside and cite the actual figure — specific and prescriptive, not generic. briefMode 'always' bypasses the cost gate so the maker prompt is actually exercised.",
+  "kind": "brief",
+  "briefMode": "always",
+  "context": {
+    "businesses": [
+      { "id": "riverside", "name": "Riverside", "type": "retail", "location": "Dayton, OH", "currency": "USD", "capitalDeployed": 120000, "netMargin": 0.18, "roic": 0.37, "monthlyProfit": 3700 },
+      { "id": "subway", "name": "Subway", "type": "restaurant", "location": "Dayton, OH", "currency": "USD", "capitalDeployed": 210000, "netMargin": 0.11, "roic": 0.16, "monthlyProfit": 2800 },
+      { "id": "portfolio", "name": "Portfolio", "type": "portfolio", "location": "—", "currency": "USD", "capitalDeployed": 418000, "roic": 0.09, "monthlyProfit": 3135 }
+    ],
+    "metricsBy": {
+      "riverside": { "today": 2980, "vsExpected": -0.22, "expectedToday": 3820, "wow": -0.18, "weekToDate": 21000, "last30": 99000, "roic": 0.37, "monthlyProfit": 3700, "transactionsToday": 150, "avgTicket": 19.9, "forecastNext30": 101000 },
+      "subway": { "today": 3200, "vsExpected": 0.0, "expectedToday": 3200, "wow": 0.01, "weekToDate": 19500, "last30": 82000, "roic": 0.16, "monthlyProfit": 2800, "transactionsToday": 182, "avgTicket": 17.6, "forecastNext30": 83000 },
+      "portfolio": { "marketValue": 418000, "totalReturn": -0.05, "dayChangeUsd": 600, "roic": 0.09, "monthlyProfit": 3135 }
+    },
+    "empire": { "revenueToday": 6180, "revenueDayChange": -0.12, "weekToDate": 40500, "last30": 181000, "netWorth": 760000, "totalAssets": 860000, "liabilities": 100000, "manualAssets": 0, "investments": 418000, "cash": 40000, "businessEquity": 330000, "asOf": "2026-06-23" },
+    "idleCash": 40000,
+    "insights": [
+      { "kind": "alert", "title": "Riverside 22% below a normal Tuesday", "detail": "$2,980 vs a typical $3,820 — the gap is in the evening.", "priority": 95 }
+    ],
+    "anomalies": [
+      { "businessId": "riverside", "business": "Riverside", "when": "2026-06-23", "kind": "below", "sigma": 2.1, "vsExpected": -0.22, "actual": 2980, "expected": 3820, "runLength": 1 }
+    ]
+  },
+  "expect": {
+    "mustMention": ["riverside"],
+    "mustMatch": ["22%|2,?980|3,?8|below a"]
+  }
+}

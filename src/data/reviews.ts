@@ -9,6 +9,9 @@
  * honest "rooms are a little dated" note).
  */
 
+import type { Business } from "../types";
+import { NORTHWOOD_ID } from "./northwood";
+
 export type ReviewPlatform = "google" | "tripadvisor" | "bookingcom" | "expedia";
 
 export interface PlatformRating {
@@ -129,4 +132,29 @@ export function northwoodReviews(): ReviewSummary {
     reviews: REVIEWS,
     highlights: HIGHLIGHTS,
   };
+}
+
+/**
+ * The compact "reputation radar" for the AI COO — the DEPTH a chain hotel's bare score doesn't carry:
+ * how the latest reviews are trending vs the all-time blend, and the recurring "watch" themes guests
+ * keep raising. Today only Northwood has a unified review feed, so this is keyed to it; when another
+ * property gets one, map it here (the generic /5 score + count still flows for every rated property via
+ * the Business config). Returns null when there's no unified feed for this property.
+ */
+export function reviewRadarFor(
+  b: Business,
+): { recent: number; recentCount: number; trend: "up" | "down" | "flat"; watch: { label: string; count: number }[] } | null {
+  if (b.id !== NORTHWOOD_ID) return null;
+  const s = northwoodReviews();
+  const recent = [...s.reviews].sort((a, z) => z.date.localeCompare(a.date)).slice(0, 5);
+  if (!recent.length) return null;
+  const recentAvg = recent.reduce((acc, r) => acc + toFive(r.rating, r.scale), 0) / recent.length;
+  const recentScore = Math.round(recentAvg * 10) / 10;
+  const trend = recentScore > s.blended + 0.1 ? "up" : recentScore < s.blended - 0.1 ? "down" : "flat";
+  const watch = s.highlights
+    .filter((h) => h.sentiment === "watch")
+    .sort((a, z) => z.count - a.count)
+    .slice(0, 2)
+    .map((h) => ({ label: h.label, count: h.count }));
+  return { recent: recentScore, recentCount: recent.length, trend, watch };
 }

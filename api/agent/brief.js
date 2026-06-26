@@ -6,6 +6,6 @@ import { handleBrief } from "../../server/agent.mjs";
 
 export default async function handler(req, res) {
   const body = req.body || {};
-  const result = await handleBrief({ context: body.context ?? {} });
+  const result = await handleBrief({ context: body.context ?? {}, previousBrief: body.previousBrief ?? null });
   res.status(200).json(result);
 }

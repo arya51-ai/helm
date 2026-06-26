@@ -1,0 +1,27 @@
+{
+  "name": "RGI level vs falling trend — lead with the trend",
+  "why": "RGI 101 reads 'winning share', but occTrend7 -0.09 / revparTrend7 -0.04 say the property is about to lose it. The answer must surface the decline and prescribe a rate move, not say 'you're fine'.",
+  "kind": "ask",
+  "question": "How's the Dublin property doing — anything to worry about?",
+  "context": {
+    "businesses": [
+      { "id": "dublin", "name": "Dublin Inn", "type": "hotel", "location": "Dublin, OH", "currency": "USD", "capitalDeployed": 2200000, "roic": 0.07, "monthlyProfit": 13000 }
+    ],
+    "metricsBy": {
+      "dublin": {
+        "today": 8800, "vsExpected": -0.04, "expectedToday": 9150, "wow": -0.03, "weekToDate": 54000, "last30": 238000, "roic": 0.07, "monthlyProfit": 13000, "transactionsToday": 42, "avgTicket": 209, "forecastNext30": 236000,
+        "hotel": { "brand": "Best Western", "rooms": 88, "occupancy": 0.71, "occToday": 0.68, "occVsExpected": -0.05, "adr": 148, "revpar": 105, "revparToday": 101, "rgi": 101, "compSetRevpar": 104, "gopMargin": 0.34, "laborPct": 0.31, "revparTrend7": -0.04, "occTrend7": -0.09, "rgiTrend7": -0.03 }
+      }
+    },
+    "empire": { "revenueToday": 8800, "revenueDayChange": -0.03, "weekToDate": 54000, "last30": 238000, "netWorth": 2400000, "totalAssets": 2600000, "liabilities": 200000, "manualAssets": 0, "investments": 0, "cash": 60000, "businessEquity": 2340000, "asOf": "2026-06-23" },
+    "idleCash": 60000,
+    "insights": [
+      { "kind": "watch", "title": "Dublin occupancy sliding", "detail": "Midweek occupancy down ~9% over 7 days.", "priority": 70 }
+    ]
+  },
+  "expect": {
+    "mustMention": ["occupancy"],
+    "mustMatch": ["trim|rate|bar|midweek|lower|drop", "down|declin|slid|soft|fall"],
+    "mustNotMention": ["you're fine", "nothing to worry", "winning share"]
+  }
+}

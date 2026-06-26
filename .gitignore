@@ -36,3 +36,6 @@ docs/DATA_CONNECTION_STRATEGY.md
 
 # Local dev launcher (not for the repo)
 Start Helm.command
+
+# Generated knowledge-graph artifact (rebuild with: graphify update)
+graphify-out/

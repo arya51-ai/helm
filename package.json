@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "server": "node server/index.mjs",
-    "smoke": "node scripts/smoke-deploy.mjs"
+    "smoke": "node scripts/smoke-deploy.mjs",
+    "eval": "node evals/run.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",

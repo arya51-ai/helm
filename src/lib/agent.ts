@@ -7,6 +7,9 @@ import { summarizeForecast, paceToGoal } from "./forecast";
 import { empireAnomalies } from "./anomalies";
 import { bakedBrief } from "./bakedBrief";
 import { goalFor } from "../data/goals";
+import { list as listActions } from "../data/actions";
+import { reviewRadarFor } from "../data/reviews";
+import { weekday, daysAgo } from "./format";
 
 /**
  * The Helm "brain" client. Talks to the server-side Claude connector (/api/agent),
@@ -72,6 +75,9 @@ function motelBlock(b: Business, h: HotelMetrics) {
   const s = motelChannelStats(b);
   const hw = daysToSummerfest();
   const c = b.channelMix;
+  // Reputation radar — recurring "watch" themes + recent-trend, the depth a chain hotel's bare score
+  // lacks. Data-layer-gated to the property whose review feed we actually have (reviews.ts).
+  const reviews = reviewRadarFor(b);
   return {
     independent: true,
     currency: "CAD",
@@ -101,6 +107,7 @@ function motelBlock(b: Business, h: HotelMetrics) {
         }
       : {}),
     daysToSummerfestWeekend: hw.days,
+    ...(reviews ? { reviews } : {}),
   };
 }
 
@@ -185,6 +192,16 @@ export function buildAgentContext(ctx: AskContext) {
           else base.hotel = hotelBlock(b, h);
         }
       }
+      // Reputation signal — the online review aggregate (out of 5), so the brain can compare
+      // reputation ACROSS the empire and flag a weak/slipping property. Generic: any business
+      // with a score (today hotels + the motel, but it flows for any source that sets one).
+      if (b.reviewScore != null && b.reviewCount != null) {
+        base.reviews = {
+          score: r2(b.reviewScore),
+          count: b.reviewCount,
+          ...(b.stars != null ? { stars: b.stars } : {}),
+        };
+      }
       metricsBy[b.id] = base;
       const goal = goalFor(b.id);
       if (goal > 0) {
@@ -210,6 +227,25 @@ export function buildAgentContext(ctx: AskContext) {
       runLength: a.runLength,
     }));
 
+  // What the owner already has in motion — fed in so the brain follows up on open loops instead of
+  // re-recommending work already done. Turns Helm from an advisor into a COO with memory; reads the
+  // same tracked-actions store (data/actions.ts) the "Open loops" UI does. Capped + most-recent-first.
+  const openLoops = listActions()
+    .filter((a) => a.status !== "done")
+    .sort((a, b) => (b.sentAt ?? b.createdAt) - (a.sentAt ?? a.createdAt))
+    .slice(0, 6)
+    .map((a) => {
+      const b = a.businessId ? ctx.businesses.find((x) => x.id === a.businessId) : undefined;
+      const since = a.sentAt ?? a.createdAt;
+      return {
+        what: (a.insightTitle ?? a.draftText).slice(0, 90),
+        kind: a.kind, // message | reorder | capital | task
+        ...(b ? { business: b.shortName ?? b.name } : {}),
+        status: a.status, // drafted = written, not yet sent · sent = sent, awaiting an outcome
+        ageDays: Math.max(0, Math.round((Date.now() - since) / 86_400_000)),
+      };
+    });
+
   const e = ctx.empire;
   return {
     businesses,
@@ -227,6 +263,10 @@ export function buildAgentContext(ctx: AskContext) {
       cash: r0(e.cash),
       businessEquity: r0(e.businessEquity),
       asOf: e.asOf,
+      // Temporal grounding: the model can't reliably derive a weekday from a date, and can't know
+      // "now" — so spell out what weekday asOf is (vsExpected compares same-weekday) and how stale it
+      // is, so it reasons "this Tuesday vs a normal Tuesday" instead of hedging or guessing the date.
+      ...(e.asOf ? { asOfWeekday: weekday(e.asOf, true), asOfLagDays: daysAgo(e.asOf) } : {}),
     },
     idleCash: r0(ctx.idleCash),
     insights: ctx.insights.slice(0, 6).map((i) => ({
@@ -237,6 +277,7 @@ export function buildAgentContext(ctx: AskContext) {
     })),
     ...(Object.keys(goals).length ? { goals } : {}),
     ...(anomalies.length ? { anomalies } : {}),
+    ...(openLoops.length ? { openLoops } : {}),
   };
 }
 
@@ -294,29 +335,148 @@ export async function askAgent(
   }
 }
 
-// ── Morning brief narrative ────────────────────────────────────────────────────
-// Three-tier: real Claude when a key is configured → the baked COO read (computed from
-// live signals) otherwise. Never null, so the "Helm's read" card always has something true
-// to say even with no API key — the model only *upgrades* the narrative when present.
+// ── Morning brief narrative — loop-engineered: free cache + cheap checker gate the Opus maker ───
+// Three-tier degradation is unchanged (Claude → baked rule read → never null). What's new is a COST
+// GATE in front of the model so the once-daily Opus brief can't be re-fired on every app open (the
+// bug that drained the budget):
+//   GATE 0  — a local fingerprint cache: if the brief-relevant data is identical to the brief we
+//             already showed, return that text with ZERO network/model cost.
+//   GATE 1+2 (server) — a free σ-anomaly rule check, then a cheap Haiku "checker" that decides if
+//             anything materially changed; only "yes" reaches the Opus "maker" (see server/agent.mjs).
+//   BACKSTOP — a hard per-day Opus ceiling enforced here on the durable client. Even if every gate
+//             failed, the brief can't run away. The baked read is always the floor, so the card is
+//             never empty while the model stays quiet.
+
+const BRIEF_CACHE_KEY = "helm:brief:v1";
+const DAILY_OPUS_CAP = 1; // hard backstop; mirror of HELM_BRIEF_DAILY_CAP on the server
+
+interface BriefCache {
+  day: string;
+  fingerprint: string | null;
+  text: string | null;
+  model: string | null;
+  opusCount: number;
+}
+
+/** Brief-relevant slice we fingerprint — a structural subset of buildAgentContext's output. */
+interface BriefProjection {
+  empire?: { asOf?: string; revenueToday?: number; last30?: number; netWorth?: number };
+  idleCash?: number;
+  businesses?: unknown[];
+  insights?: { kind?: string; title?: string }[];
+  anomalies?: { businessId?: string; kind?: string; vsExpected?: number }[];
+}
+
+/** Stable per-day key in local time, e.g. "2026-5-24" (matches useDailyRefresh's scheme). */
+function briefDayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function readBriefCache(): BriefCache | null {
+  try {
+    const raw = localStorage.getItem(BRIEF_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as BriefCache) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeBriefCache(c: BriefCache): void {
+  try {
+    localStorage.setItem(BRIEF_CACHE_KEY, JSON.stringify(c));
+  } catch {
+    /* private mode / quota — caching is best-effort */
+  }
+}
+
+/** Tiny deterministic FNV-1a hash → short hex. Keeps the stored key small. */
+function hashString(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+}
+
+/**
+ * Fingerprint the brief-relevant projection: headline numbers + the σ-anomaly/alert signature.
+ * vsExpected is bucketed to ~5% so ordinary daily noise doesn't churn the cache, while a real swing
+ * or a new anomaly flips it. Same data → same fingerprint → Gate 0 hit (no server/model call).
+ */
+function briefFingerprint(agentCtx: BriefProjection): string {
+  const e = agentCtx.empire ?? {};
+  const anomalies = (agentCtx.anomalies ?? []).map(
+    (a) => `${a.businessId}:${a.kind}:${Math.round((a.vsExpected ?? 0) * 20)}`,
+  );
+  const alerts = (agentCtx.insights ?? []).filter((i) => i.kind === "alert").map((i) => i.title);
+  const sig = JSON.stringify({
+    asOf: e.asOf ?? null,
+    rev: e.revenueToday ?? null,
+    m30: e.last30 ?? null,
+    nw: e.netWorth ?? null,
+    cash: agentCtx.idleCash ?? null,
+    nBiz: (agentCtx.businesses ?? []).length,
+    anomalies,
+    alerts,
+  });
+  return hashString(sig);
+}
+
 export async function generateBrief(ctx: AskContext): Promise<string | null> {
-  const baked = () => {
-    const t = bakedBrief(ctx);
-    return t || null;
-  };
+  const baked = () => bakedBrief(ctx) || null;
+
+  let agentCtx: ReturnType<typeof buildAgentContext>;
+  try {
+    agentCtx = buildAgentContext(ctx);
+  } catch {
+    return baked();
+  }
+  const fp = briefFingerprint(agentCtx);
+  const today = briefDayKey();
+
+  let cache = readBriefCache();
+  if (!cache || cache.day !== today) {
+    cache = { day: today, fingerprint: null, text: null, model: null, opusCount: 0 };
+  }
+
+  // GATE 0 — nothing material changed since the brief we already have → free.
+  if (cache.fingerprint === fp && cache.text) return cache.text;
+
   try {
     const status = await agentStatus();
     if (!status.available) return baked();
+
+    // BACKSTOP — today's Opus budget is spent. Keep the best text we have, and record the new
+    // fingerprint so further re-renders of the same data stay on Gate 0 (free).
+    if (cache.opusCount >= DAILY_OPUS_CAP) {
+      const text = cache.text ?? baked();
+      writeBriefCache({ ...cache, fingerprint: fp, text });
+      return text;
+    }
+
     const resp = await fetch(`${API}/brief`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ context: buildAgentContext(ctx) }),
+      body: JSON.stringify({ context: agentCtx, previousBrief: cache.text ?? null }),
     });
-    if (!resp.ok) return baked();
+    if (!resp.ok) return cache.text ?? baked();
     const j = await resp.json();
-    if (j?.available && j.text && !j.error) return String(j.text).trim();
-    return baked();
+
+    // Maker fired — Opus wrote a fresh brief. Cache it and burn one of today's budget.
+    if (j?.available && j.text && !j.error) {
+      const text = String(j.text).trim();
+      writeBriefCache({ day: today, fingerprint: fp, text, model: j.model ?? "opus", opusCount: cache.opusCount + 1 });
+      return text;
+    }
+    // Checker/rules said "no material change" (or the model was unavailable): keep the prior text,
+    // but record the fingerprint so we don't re-ask the server for the same data.
+    const text = cache.text ?? baked();
+    writeBriefCache({ ...cache, day: today, fingerprint: fp, text });
+    return text;
   } catch {
-    return baked();
+    return cache.text ?? baked();
   }
 }
 

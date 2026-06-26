@@ -1,12 +1,13 @@
 // Helm — AI COO agent connector (Claude)
 // ─────────────────────────────────────────────────────────────────────────────
 // Brokers Anthropic's Claude on the server so the API key NEVER reaches the
-// browser (same boundary as the Plaid secret). Exposes three routes under
+// browser (same boundary as the Plaid secret). Exposes five routes under
 // /api/agent:
 //   GET  /status        → { available, askModel, briefModel }  (frontend feature-detects)
 //   POST /ask           → SSE stream of the answer (text deltas), grounded in the owner's data
 //   POST /brief         → { available, text }  the morning "read" for the Brief
 //   POST /draft         → { available, text }  a drafted action artifact (human sends it)
+//   POST /vision        → { available, ...fields }  structured numbers from a snapped report photo
 //
 // Two modes, decided purely by whether a key is present:
 //   • CONFIGURED (ANTHROPIC_API_KEY set) → real Claude.
@@ -33,7 +34,13 @@ function env() {
   // Sonnet 4.6 for the interactive/low-latency paths; Opus 4.8 for the once-daily brief.
   const askModel = (process.env.HELM_ASK_MODEL || "claude-sonnet-4-6").trim();
   const briefModel = (process.env.HELM_BRIEF_MODEL || "claude-opus-4-8").trim();
-  return { key, configured: Boolean(key), askModel, briefModel };
+  // Brief cost gate: a cheap Haiku "checker" decides if the data materially changed before the
+  // expensive Opus "maker" writes. Mode: off | rules | haiku-gated (default) | always.
+  const checkModel = (process.env.HELM_CHECK_MODEL || "claude-haiku-4-5").trim();
+  const briefMode = (process.env.HELM_BRIEF_MODE || "haiku-gated").trim();
+  const rawCap = process.env.HELM_BRIEF_DAILY_CAP;
+  const dailyCap = rawCap != null && rawCap !== "" && Number.isFinite(Number(rawCap)) ? Number(rawCap) : 1;
+  return { key, configured: Boolean(key), askModel, briefModel, checkModel, briefMode, dailyCap };
 }
 
 // ── Lazy Anthropic client (only constructed when a real key exists) ─────────────
@@ -99,7 +106,21 @@ Q: "What needs me today?" → "Riverside ran 22% below a normal Tuesday — $2,9
 Q: "Where should I put my cash?" → "Into Riverside. It returns ~37% on the capital in it vs ~9% in your portfolio. Your $42k of idle cash would earn about $11,800/yr more there than left in the market."
 Q: "Why is the Dublin property trailing?" → "RGI's at 92 — you're winning rate but losing occupancy midweek. ADR's strong at $148, but Tue/Wed occupancy is dragging RevPAR under the comp set. Trim BAR ~6% Tue/Wed and push the midweek corporate rate; that's where the share is leaking."
 Q (Northwood Motel): "How much am I paying Booking.com?" → "About CA$2,700 last month — Booking.com is a third of your rooms at a 15% cut, with Expedia another ~CA$1,400 on top. That's roughly CA$17k across your Jun–Sep season. You're already 40% direct, so it's movable: a 'book direct' card at checkout and a small repeat-guest rate, and shifting just 1 in 10 OTA stays to direct puts ~CA$800/mo back in your pocket."
-Q (Northwood Motel): "Should I raise rates for the long weekend?" → "Yes — Summerfest's 41 days out and the island sells out that weekend. You're still showing shoulder rates into it. Put a 2-night minimum on Aug 1–4 and lift Fri/Sat; even +CA$15 a night across 22 rooms is ~CA$1,000 over the weekend. Set it in Little Hotelier now, before the OTAs anchor it low."`;
+Q (Northwood Motel): "Should I raise rates for the long weekend?" → "Yes — Summerfest's 41 days out and the island sells out that weekend. You're still showing shoulder rates into it. Put a 2-night minimum on Aug 1–4 and lift Fri/Sat; even +CA$15 a night across 22 rooms is ~CA$1,000 over the weekend. Set it in Little Hotelier now, before the OTAs anchor it low."
+
+JUDGMENT CALLS (real prior reads and the CORRECT call — match this JUDGMENT, not just the tone above; these are the cases where a naive read goes wrong):
+- INPUT: Riverside vsExpected -0.27 on a public holiday (e.g. Memorial Day).
+  WRONG: "Riverside ran 27% below normal — text your closer."
+  RIGHT: "Quiet holiday — Riverside's down 27% but that's the day, not a problem. Nothing needs you."
+  WHY: a same-weekday comparison can't see holidays. Sanity-check a big negative vsExpected against the calendar before flagging it as a real anomaly.
+- INPUT: a hotel showing RGI 101 but occTrend7 -0.09 and revparTrend7 -0.04.
+  WRONG: "RGI's above 100 — you're winning share, you're fine."
+  RIGHT: "RGI still reads 101 but it's a trailing average — occupancy's down 9% on the week and RevPAR's following it down. You're about to lose share, not winning it. Trim midweek BAR now."
+  WHY: RGI is a lagging average; the 7-day trend is the leading signal. When a level and its trend disagree, lead with the trend.
+- INPUT: owner asks "where do I put $40k?" with idle cash present, Riverside roic 0.37, portfolio 0.09.
+  WRONG: "You could consider moving some cash into a higher-returning business."
+  RIGHT: (after calling reallocate_what_if) "Into Riverside — $40k there earns ~$11,200/yr more than in the market. Move it."
+  WHY: never hand-wave a reallocation. Call reallocate_what_if for the exact delta, then state the number and the verb.`;
 
 // ── TOOLS: the brain computes on EXACT numbers ─────────────────────────────────
 // Appended to the SYSTEM prefix (kept as its own cache-stable string). Tells the model the
@@ -385,10 +406,132 @@ export async function handleAsk({ question, context, env: e = env() }, res) {
   }
 }
 
-/** POST /brief — one-shot JSON, same tool loop, then a final text turn. Returns the body object. */
-export async function handleBrief({ context, env: e = env() }) {
-  if (!e.configured) return { available: false };
+// ── Brief cost gate (loop-engineering): cheap checker decides, expensive maker writes ──────────
+// The once-daily Opus brief is the single most expensive call in Helm — a tool loop plus a final
+// turn, all on Opus 4.8 with extended thinking. Re-firing it on every app open is what drained the
+// API budget. These helpers put a gate in front of it: a free σ-anomaly rule check, then a cheap
+// Haiku "checker" that says material-change yes/no, and only "yes" reaches the Opus "maker".
+
+// Best-effort per-day Opus counter. Durable on a long-lived `npm run server`; on Vercel each cold
+// start resets it, so the CLIENT holds the real daily cap (localStorage). This is the second fence.
+let _briefDay = null;
+let _briefCount = 0;
+function briefBudgetOk(e) {
+  const today = new Date().toISOString().slice(0, 10);
+  if (_briefDay !== today) {
+    _briefDay = today;
+    _briefCount = 0;
+  }
+  return _briefCount < Math.max(0, e.dailyCap);
+}
+function recordBrief() {
+  _briefCount += 1;
+}
+
+/**
+ * Free rule gate. The owner_state already carries the σ-scored anomalies (buildAgentContext filters
+ * to |vsExpected| ≥ 0.08) and the ranked insights — so "did something material happen" is answerable
+ * with no model call at all. A quiet day (no anomaly, no alert) never reaches the maker.
+ */
+function hasMaterialSignal(payload) {
+  const anomalies = Array.isArray(payload.anomalies) ? payload.anomalies : [];
+  if (anomalies.length > 0) return true;
+  const insights = Array.isArray(payload.insights) ? payload.insights : [];
+  return insights.some((i) => i && i.kind === "alert");
+}
+
+/**
+ * Cheap Haiku checker (the maker-vs-checker split from loop engineering). Given the current
+ * owner_state and the previous brief, decide whether a fresh Opus brief is warranted. Returns
+ * { materialChange, reason } or null when the reply can't be parsed (the caller then trusts the rule
+ * gate, which already flagged a signal — still bounded by the daily cap). No tools, no thinking.
+ */
+async function briefCheck({ client, model, payload, previousBrief }) {
+  const system =
+    `You are a cost gate in front of an expensive "AI COO" that writes a business owner a short morning brief. ` +
+    `Decide whether the current data genuinely warrants writing a NEW brief, or whether the previous one still stands. ` +
+    `Reply with ONLY a JSON object: {"materialChange": true|false, "reason": "<=8 words"}. ` +
+    `Answer true ONLY when something needs the owner's attention today that the previous brief did not already cover — ` +
+    `a real anomaly, a new alert, or a meaningful swing. Answer false for ordinary day-to-day variation or anything the ` +
+    `previous brief already says. Default to false when unsure; a new brief is expensive.`;
+  const userText =
+    `<owner_state>\n${typeof payload === "string" ? payload : JSON.stringify(payload)}\n</owner_state>\n\n` +
+    (previousBrief
+      ? `Previous brief:\n"""\n${String(previousBrief).slice(0, 1200)}\n"""\n\n`
+      : `There is no previous brief yet.\n\n`) +
+    `Does the owner need a new brief? JSON only.`;
+  // Prefill the assistant turn so the reply is forced to begin as the exact JSON we want — it
+  // commits straight to the boolean, no preamble. We prepend it back before parsing.
+  const PREFILL = '{"materialChange":';
+  const msg = await client.messages.create({
+    model,
+    max_tokens: 200,
+    thinking: { type: "disabled" },
+    system,
+    messages: [
+      { role: "user", content: userText },
+      { role: "assistant", content: PREFILL },
+    ],
+  });
+  const raw = (
+    PREFILL +
+    (msg.content || [])
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+  ).trim();
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      const parsed = JSON.parse(match[0]);
+      if (typeof parsed.materialChange === "boolean") {
+        return { materialChange: parsed.materialChange, reason: String(parsed.reason || "").slice(0, 60) };
+      }
+    } catch {
+      /* unparseable — fall through to null */
+    }
+  }
+  return null;
+}
+
+/**
+ * POST /brief — gated. Cheapest check first: rule gate → Haiku checker → Opus maker (capped). Returns
+ *   { available:false }                         no key / brief disabled
+ *   { available:true, skipped:true, reason }    nothing material changed (client keeps prior/baked read)
+ *   { available:true, text, model:"opus" }      a freshly written brief
+ *   { available:true, error }                   model/transport error (client falls back)
+ * The maker is bounded: ≤3 tool rounds + a final turn, capped max_tokens, and a hard per-day cap.
+ */
+export async function handleBrief({ context, previousBrief = null, env: e = env() }) {
+  if (!e.configured || e.briefMode === "off") return { available: false };
   const payload = asPayload(context);
+
+  // ── Decide whether the expensive maker should run at all ─────────────────────
+  let reason = "";
+  if (e.briefMode === "always") {
+    reason = "mode=always";
+  } else {
+    if (!hasMaterialSignal(payload)) return { available: true, skipped: true, reason: "no material signal" };
+    if (e.briefMode === "haiku-gated") {
+      try {
+        const checkClient = await anthropic();
+        const verdict = await briefCheck({ client: checkClient, model: e.checkModel, payload, previousBrief });
+        if (verdict && verdict.materialChange === false) {
+          return { available: true, skipped: true, reason: verdict.reason || "checker: no change" };
+        }
+        reason = verdict ? verdict.reason || "checker: change" : "checker unavailable → rule";
+      } catch {
+        reason = "checker error → rule"; // fail toward the rule gate's decision; still capped per day
+      }
+    } else {
+      reason = "rule signal"; // briefMode === "rules"
+    }
+  }
+
+  // ── Hard daily backstop ──────────────────────────────────────────────────────
+  if (!briefBudgetOk(e)) return { available: true, skipped: true, reason: "daily cap" };
+
+  // ── Maker: Opus writes the brief (bounded tool loop + capped tokens) ─────────
   try {
     const client = await anthropic();
     const system = [{ type: "text", text: SYSTEM_WITH_TOOLS, cache_control: { type: "ephemeral" } }];
@@ -401,7 +544,7 @@ export async function handleBrief({ context, env: e = env() }) {
       system,
       messages: seed,
       payload,
-      maxRounds: 5,
+      maxRounds: 3,
       max_tokens: 1200,
       thinking: { type: "adaptive" },
     });
@@ -421,7 +564,8 @@ export async function handleBrief({ context, env: e = env() }) {
       .map((b) => b.text)
       .join("")
       .trim();
-    return { available: true, text };
+    recordBrief();
+    return { available: true, text, model: "opus", reason };
   } catch (err) {
     return { available: true, error: errMsg(err) };
   }
@@ -500,6 +644,11 @@ Return ONLY the JSON object.`;
 
   try {
     const client = await anthropic();
+    // NOTE: do NOT prefill the assistant turn here. claude-sonnet-4-6 (the 4.6/4.7/4.8 family)
+    // rejects last-assistant-turn prefills with a 400 — which would make every snap silently fall
+    // back to manual entry. The strict "ONLY a JSON object" instruction plus the tolerant JSON
+    // scrape below are what shape the output. To force the shape harder, use output_config
+    // structured outputs (supported on Sonnet 4.6), NOT prefill.
     const msg = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 400,
@@ -579,7 +728,7 @@ export async function createAgentApp() {
 
   // 2) Morning Brief — a short, prioritized "read" shown atop the rule-engine insight cards.
   app.post("/brief", async (req, res) => {
-    const body = await handleBrief({ context: req.body?.context ?? {} });
+    const body = await handleBrief({ context: req.body?.context ?? {}, previousBrief: req.body?.previousBrief ?? null });
     res.status(200).json(body);
   });
 

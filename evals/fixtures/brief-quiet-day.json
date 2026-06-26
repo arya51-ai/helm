@@ -1,0 +1,23 @@
+{
+  "name": "Cost gate declines a quiet day (the $11.55-drain guard)",
+  "why": "No anomalies, no alerts → hasMaterialSignal is false → handleBrief must return skipped:true BEFORE any model call. This is the gate that stops the Opus brief from re-firing on every app open. Runs at the default haiku-gated mode and costs ~nothing (skips before the model).",
+  "kind": "brief",
+  "context": {
+    "businesses": [
+      { "id": "riverside", "name": "Riverside", "type": "retail", "location": "Dayton, OH", "currency": "USD", "capitalDeployed": 120000, "netMargin": 0.18, "roic": 0.37, "monthlyProfit": 3700 },
+      { "id": "subway", "name": "Subway", "type": "restaurant", "location": "Dayton, OH", "currency": "USD", "capitalDeployed": 210000, "netMargin": 0.11, "roic": 0.16, "monthlyProfit": 2800 }
+    ],
+    "metricsBy": {
+      "riverside": { "today": 4120, "vsExpected": 0.0, "expectedToday": 4120, "wow": 0.01, "weekToDate": 24000, "last30": 102000, "roic": 0.37, "monthlyProfit": 3700, "transactionsToday": 205, "avgTicket": 20.1, "forecastNext30": 103000 },
+      "subway": { "today": 3200, "vsExpected": 0.0, "expectedToday": 3200, "wow": 0.0, "weekToDate": 19500, "last30": 82000, "roic": 0.16, "monthlyProfit": 2800, "transactionsToday": 182, "avgTicket": 17.6, "forecastNext30": 83000 }
+    },
+    "empire": { "revenueToday": 7320, "revenueDayChange": 0.0, "weekToDate": 43500, "last30": 184000, "netWorth": 760000, "totalAssets": 860000, "liabilities": 100000, "manualAssets": 0, "investments": 418000, "cash": 40000, "businessEquity": 330000, "asOf": "2026-06-23" },
+    "idleCash": 40000,
+    "insights": [
+      { "kind": "info", "title": "Both stores tracking normal", "detail": "Nothing outside the usual weekday rhythm.", "priority": 20 }
+    ]
+  },
+  "expect": {
+    "gate": { "skipped": true }
+  }
+}

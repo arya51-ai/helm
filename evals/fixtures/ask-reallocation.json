@@ -1,0 +1,28 @@
+{
+  "name": "Reallocation must use the tool, not hand-wave",
+  "why": "A 'where do I put cash' question must call reallocate_what_if and quote the exact $/yr delta (40000 × (0.37 − 0.09) = 11,200), not vaguely suggest 'a higher-returning business'.",
+  "kind": "ask",
+  "question": "I've got about $40k sitting in checking. Where should I put it?",
+  "context": {
+    "businesses": [
+      { "id": "riverside", "name": "Riverside", "type": "retail", "location": "Dayton, OH", "currency": "USD", "capitalDeployed": 120000, "netMargin": 0.18, "roic": 0.37, "monthlyProfit": 3700 },
+      { "id": "subway", "name": "Subway", "type": "restaurant", "location": "Dayton, OH", "currency": "USD", "capitalDeployed": 210000, "netMargin": 0.11, "roic": 0.16, "monthlyProfit": 2800 },
+      { "id": "portfolio", "name": "Portfolio", "type": "portfolio", "location": "—", "currency": "USD", "capitalDeployed": 418000, "roic": 0.09, "monthlyProfit": 3135 }
+    ],
+    "metricsBy": {
+      "riverside": { "today": 4200, "vsExpected": 0.02, "expectedToday": 4120, "wow": 0.01, "weekToDate": 24000, "last30": 102000, "roic": 0.37, "monthlyProfit": 3700, "transactionsToday": 210, "avgTicket": 20, "forecastNext30": 104000 },
+      "subway": { "today": 3100, "vsExpected": -0.03, "expectedToday": 3200, "wow": -0.01, "weekToDate": 19000, "last30": 82000, "roic": 0.16, "monthlyProfit": 2800, "transactionsToday": 180, "avgTicket": 17.2, "forecastNext30": 83000 },
+      "portfolio": { "marketValue": 418000, "totalReturn": -0.05, "dayChangeUsd": -1200, "roic": 0.09, "monthlyProfit": 3135 }
+    },
+    "empire": { "revenueToday": 7300, "revenueDayChange": -0.01, "weekToDate": 43000, "last30": 184000, "netWorth": 760000, "totalAssets": 860000, "liabilities": 100000, "manualAssets": 0, "investments": 418000, "cash": 40000, "businessEquity": 330000, "asOf": "2026-06-23" },
+    "idleCash": 40000,
+    "insights": [
+      { "kind": "opportunity", "title": "$40k idle cash earning ~0%", "detail": "Checking balance has sat near $40k for 3 weeks.", "priority": 80 }
+    ]
+  },
+  "expect": {
+    "mustMention": ["riverside"],
+    "mustMatch": ["11[,.]?2", "/yr|year"],
+    "mustNotMention": ["could consider", "you might want", "you may want"]
+  }
+}

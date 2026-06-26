@@ -1,0 +1,35 @@
+{
+  "name": "Northwood OTA fees — CA$, never USD, lead with 'direct'",
+  "why": "Independent-motel money is Canadian dollars and must NOT be converted to USD. The answer should quote the commission in CA$, never say USD, and lead with the direct-booking lever.",
+  "kind": "ask",
+  "question": "How much am I paying Booking.com at the Northwood right now?",
+  "context": {
+    "businesses": [
+      { "id": "northwood", "name": "Northwood Motel", "type": "hotel", "location": "Pinecrest, ON", "currency": "CAD", "capitalDeployed": 900000, "roic": 0.12, "monthlyProfit": 9000 }
+    ],
+    "metricsBy": {
+      "northwood": {
+        "today": 2800, "vsExpected": 0.05, "expectedToday": 2670, "wow": 0.03, "weekToDate": 17000, "last30": 74000, "roic": 0.12, "monthlyProfit": 9000, "transactionsToday": 18, "avgTicket": 156, "forecastNext30": 78000,
+        "motel": {
+          "independent": true, "currency": "CAD", "rooms": 22, "pms": "Little Hotelier",
+          "occupancy": 0.74, "occToday": 0.82, "occVsExpected": 0.04,
+          "adrCad": 156, "adrTodayCad": 162, "revparCad": 115, "revparTrend30": 0.06, "occTrend7": 0.03,
+          "directSharePct": 0.40, "bookingComSharePct": 0.34, "expediaSharePct": 0.18, "otaSharePct": 0.52,
+          "monthRoomRevenueCad": 74000, "monthCommissionCad": 2700, "bookingComFeeCad": 1300, "expediaFeeCad": 1400,
+          "seasonCommissionCad": 17000, "shift10pctToDirectMonthlyCad": 800, "shift10pctToDirectSeasonCad": 4800,
+          "daysToSummerfestWeekend": 38
+        }
+      }
+    },
+    "empire": { "revenueToday": 2800, "revenueDayChange": 0.05, "weekToDate": 17000, "last30": 74000, "netWorth": 900000, "totalAssets": 1000000, "liabilities": 100000, "manualAssets": 0, "investments": 0, "cash": 30000, "businessEquity": 870000, "asOf": "2026-06-23" },
+    "idleCash": 30000,
+    "insights": [
+      { "kind": "opportunity", "title": "OTA commission running ~CA$2.7k/mo", "detail": "Booking.com + Expedia took ~CA$2,700 last month.", "priority": 75 }
+    ]
+  },
+  "expect": {
+    "mustMatch": ["ca\\$|cad", "2[,.]?7|booking"],
+    "mustMention": ["direct"],
+    "mustNotMention": ["usd"]
+  }
+}
