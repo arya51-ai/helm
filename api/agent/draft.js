@@ -2,9 +2,11 @@
 // Returns a drafted action artifact as JSON (same shape as brief). The owner reviews/sends it.
 // Delegates to the shared handler in server/agent.mjs.
 // ESM: package.json "type":"module" → this .js file is ESM; the .mjs import resolves on Vercel.
-import { handleDraft } from "../../server/agent.mjs";
+import { handleDraft, guardAgentRequest } from "../../server/agent.mjs";
 
 export default async function handler(req, res) {
+  const guard = guardAgentRequest(req);
+  if (!guard.ok) return res.status(guard.status).json(guard.body);
   const body = req.body || {};
   const result = await handleDraft({
     action: body.action,

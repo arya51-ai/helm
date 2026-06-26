@@ -26,6 +26,7 @@ import { buildSampleHotels } from "../data/hotels";
 import { parseHotelFile, buildHotelFromImport, manualHotel, type ParsedHotelImport } from "../lib/hotelImport";
 import { parseFuelFile, buildStationFromImport, manualFuel, type ParsedFuelImport } from "../lib/fuelImport";
 import { toUSD } from "../lib/currency";
+import { agentHeaders } from "../lib/agent";
 import { upsertImported } from "../data/source";
 import { usd, usdCompact, money, shortDate, pct } from "../lib/format";
 import { cx } from "./ui";
@@ -111,7 +112,7 @@ async function extractFromImage(file: File, businessType: string): Promise<Visio
   const { base64, mediaType } = await fileToBase64(file);
   const resp = await fetch("/api/agent/vision", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: agentHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ imageBase64: base64, mediaType, businessType }),
   });
   if (!resp.ok) return { kind: "unavailable" };

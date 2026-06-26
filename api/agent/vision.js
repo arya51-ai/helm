@@ -5,9 +5,11 @@
 //   | { kind:"sales", date, grossSales, netSales, transactions }
 // Any field not clearly visible is null (never fabricated). Delegates to handleVision.
 // ESM: package.json "type":"module" → this .js file is ESM; the .mjs import resolves on Vercel.
-import { handleVision } from "../../server/agent.mjs";
+import { handleVision, guardAgentRequest } from "../../server/agent.mjs";
 
 export default async function handler(req, res) {
+  const guard = guardAgentRequest(req);
+  if (!guard.ok) return res.status(guard.status).json(guard.body);
   const body = req.body || {};
   const result = await handleVision({
     imageBase64: body.imageBase64,

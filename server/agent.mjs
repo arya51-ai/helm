@@ -711,10 +711,105 @@ Return ONLY the JSON object.`;
 // ── Express wiring — thin adapters over the exported handlers above. The same handlers
 //    are imported directly by the api/agent/*.js Vercel functions, so dev and deploy share
 //    one code path. `npm run dev` behaviour is unchanged.
+// ── Abuse guard for the public AI relay ────────────────────────────────────────
+// The deployed /api/agent/* routes are unauthenticated and billed to the server key,
+// so an open relay means anyone who finds the URL can spend the budget (the exact way
+// a runaway brief once drained it). These are best-effort, infra-free defenses:
+// an origin allowlist + an optional shared secret + per-IP and global rate caps.
+// On serverless each instance has its own memory, so the counters are SOFT, per-instance
+// backstops — not hard guarantees. The hard ceiling stays the credit balance (keep
+// Vercel auto-reload OFF). Swap the in-memory counters for a KV store if Helm ever goes
+// truly public. A blocked request returns { available:false }, so the client degrades to
+// the rule engine exactly like "no key" — graceful degradation is preserved.
+function guardEnv() {
+  const origins = (process.env.HELM_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  const secret = process.env.HELM_CLIENT_SECRET?.trim() || "";
+  const perIp = Number(process.env.HELM_AGENT_IP_CAP) || 40; // calls / window / IP
+  const windowMs = (Number(process.env.HELM_AGENT_IP_WINDOW_MIN) || 10) * 60_000;
+  const dailyCap = Number(process.env.HELM_AGENT_DAILY_CAP) || 300; // global calls / day
+  return { origins, secret, perIp, windowMs, dailyCap };
+}
+
+const _ipHits = new Map(); // ip -> recent request timestamps (within the window)
+let _agentDay = "";
+let _agentCount = 0;
+
+function hostOf(u) {
+  try {
+    return new URL(u).host.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Gate one agent request. Returns { ok:true } to proceed, or { ok:false, status, body }
+ * to reject. Works for both the Express `req` (plain headers object) and the Vercel
+ * serverless `req` (same shape). Leave /status ungated — it's free and the frontend needs
+ * it to feature-detect.
+ */
+export function guardAgentRequest(req) {
+  const g = guardEnv();
+  const h = (req && req.headers) || {};
+  const get = (k) => String(h[k] || "");
+
+  // 1) Origin / Referer allowlist — only enforced when configured, so dev and any
+  //    not-yet-configured deploy keep working (and degrade gracefully, never break).
+  if (g.origins.length) {
+    const oHost = hostOf(get("origin")) || get("origin").toLowerCase();
+    const refHost = hostOf(get("referer"));
+    if (!g.origins.some((a) => a === oHost || a === refHost)) {
+      return { ok: false, status: 403, body: { available: false, error: "forbidden_origin" } };
+    }
+  }
+
+  // 2) Shared secret — only enforced when configured. A low bar (it ships in the SPA
+  //    bundle) but it stops the naive "curl the URL" case. Set it WITH the frontend's
+  //    VITE_HELM_CLIENT_SECRET or the whole AI degrades to rules.
+  if (g.secret && get("x-helm-key") !== g.secret) {
+    return { ok: false, status: 403, body: { available: false, error: "forbidden" } };
+  }
+
+  // 3) Per-IP sliding-window rate limit (always on; per-instance on serverless).
+  const ip = get("x-forwarded-for").split(",")[0].trim() || req?.socket?.remoteAddress || req?.ip || "unknown";
+  const nowMs = Date.now();
+  if (_ipHits.size > 5000) _ipHits.clear(); // crude unbounded-growth guard
+  const hits = (_ipHits.get(ip) || []).filter((t) => nowMs - t < g.windowMs);
+  if (hits.length >= g.perIp) {
+    return { ok: false, status: 429, body: { available: false, error: "rate_limited" } };
+  }
+  hits.push(nowMs);
+  _ipHits.set(ip, hits);
+
+  // 4) Global daily call backstop (per-instance; the credit balance is the hard ceiling).
+  const today = new Date().toISOString().slice(0, 10);
+  if (_agentDay !== today) {
+    _agentDay = today;
+    _agentCount = 0;
+  }
+  if (_agentCount >= g.dailyCap) {
+    return { ok: false, status: 429, body: { available: false, error: "daily_cap" } };
+  }
+  _agentCount += 1;
+
+  return { ok: true };
+}
+
 export async function createAgentApp() {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: "1mb" }));
+
+  // Gate every billed route (everything except the free /status probe) with the abuse guard.
+  app.use((req, res, next) => {
+    if (req.path === "/status") return next();
+    const g = guardAgentRequest(req);
+    if (!g.ok) return res.status(g.status).json(g.body);
+    next();
+  });
 
   // Feature-detection: the frontend calls this once and falls back to rules if unavailable.
   app.get("/status", (_req, res) => {

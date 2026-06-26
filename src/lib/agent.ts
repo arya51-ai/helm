@@ -38,6 +38,15 @@ export interface AgentStatus {
 
 const API = "/api/agent";
 
+// Optional shared secret for the billed agent routes. When the server has HELM_CLIENT_SECRET
+// set, it requires this header; we attach it to every billed call. It's not a true secret (it
+// ships in the bundle) — just a low bar above "curl the public URL". Unset → no header, and the
+// server only enforces the origin allowlist. See guardAgentRequest in server/agent.mjs.
+const CLIENT_KEY = (import.meta.env.VITE_HELM_CLIENT_SECRET as string | undefined)?.trim();
+export function agentHeaders(base: Record<string, string>): Record<string, string> {
+  return CLIENT_KEY ? { ...base, "x-helm-key": CLIENT_KEY } : base;
+}
+
 // ── Status (feature-detect once; cache the probe) ──────────────────────────────
 let _statusProbe: Promise<AgentStatus> | null = null;
 export function agentStatus(): Promise<AgentStatus> {
@@ -294,7 +303,7 @@ export async function askAgent(
 
     const resp = await fetch(`${API}/ask`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: agentHeaders({ "content-type": "application/json" }),
       body: JSON.stringify({ question, context: buildAgentContext(ctx) }),
     });
     const ctype = resp.headers.get("content-type") || "";
@@ -458,7 +467,7 @@ export async function generateBrief(ctx: AskContext): Promise<string | null> {
 
     const resp = await fetch(`${API}/brief`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: agentHeaders({ "content-type": "application/json" }),
       body: JSON.stringify({ context: agentCtx, previousBrief: cache.text ?? null }),
     });
     if (!resp.ok) return cache.text ?? baked();
@@ -491,7 +500,7 @@ export async function draftAction(
     if (!status.available) return null;
     const resp = await fetch(`${API}/draft`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: agentHeaders({ "content-type": "application/json" }),
       body: JSON.stringify({
         action,
         insight: insight ? { title: insight.title, detail: insight.detail } : null,
