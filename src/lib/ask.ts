@@ -74,10 +74,19 @@ export function suggestedQuestionsFor(ctx: AskContext): string[] {
   ];
 }
 
+// Generic name tokens that never identify a business on their own — and would otherwise match
+// most questions ("inn" lives inside "winning"/"beginning", "the" inside "there", etc.).
+const NAME_STOPWORDS = new Set(["the", "and", "for", "inn", "hotel", "shop", "store"]);
+
 function findBusiness(q: string, businesses: Business[]): Business | undefined {
+  // Word-boundary match (not substring) so "winning" doesn't match the "inn" in "Hampton Inn".
+  const hasWord = (t: string) => new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(q);
   for (const b of businesses) {
-    const toks = [b.shortName, b.name].filter(Boolean).flatMap((s) => s!.toLowerCase().split(/\s+/));
-    if (toks.some((t) => t.length >= 3 && q.includes(t))) return b;
+    const toks = [b.shortName, b.name]
+      .filter(Boolean)
+      .flatMap((s) => s!.toLowerCase().split(/\s+/))
+      .filter((t) => t.length >= 3 && !NAME_STOPWORDS.has(t));
+    if (toks.some(hasWord)) return b;
   }
   if (/\b(smoke|vape|tobacco)\b/.test(q)) return businesses.find((b) => /riverside/i.test(b.name));
   if (/\b(sandwich|franchise)\b/.test(q)) return businesses.find((b) => /subway/i.test(b.name));
@@ -414,8 +423,12 @@ export function answerQuestion(raw: string, ctx: AskContext): AskAnswer {
     };
   }
 
-  // 4) Which business is best / most per dollar
-  if (/\b(most profit|best business|which business|per dollar|most per|works hardest|earns? (the )?most|biggest)\b/.test(q) && !biz) {
+  // 4) Which business is best / most per dollar. Also catches natural phrasings like "which of my
+  // businesses is winning" / "which business is doing best" that don't use the exact "which business".
+  const bestBusinessQ =
+    /\b(most profit|best business|which business|per dollar|most per|works hardest|earns? (the )?most|biggest)\b/.test(q) ||
+    (/\bwhich\b[\s\S]*\bbusiness(es)?\b/.test(q) && /\b(best|winning|win|top|doing|performing|strongest|most)\b/.test(q));
+  if (bestBusinessQ && !biz) {
     const ranked = [...ops].sort((a, b) => roicOf(b) - roicOf(a));
     const lines = ranked
       .map((b) => `${b.shortName ?? b.name} ${pct(roicOf(b), 0)} (${usdCompact(ctx.metricsBy[b.id].monthlyProfit)}/mo)`)
