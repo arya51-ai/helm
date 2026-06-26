@@ -1,17 +1,21 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
   MapPin,
   Star,
-  RefreshCw,
   CalendarClock,
   ArrowUpRight,
   BedDouble,
+  Upload,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import type { Business, HotelDay } from "../types";
 import { hotelMetricsFor } from "../lib/hotelAnalytics";
 import { motelChannelStats, daysToSummerfest } from "../lib/motelInsights";
+import { parseHotelFile, refreshMotelFromImport } from "../lib/hotelImport";
+import { upsertImported } from "../data/source";
 import { money, pct, shortDate, weekday } from "../lib/format";
 import { Card, Delta, cx } from "./ui";
 import { AreaTrend } from "./charts";
@@ -34,13 +38,46 @@ const ca = (n: number) => money(n, "CAD");
  * rate, then the thing a motel owner actually feels: where the bookings come from and what the
  * OTAs take. No RevPAR Index, no GOP, no brand PIP — those are chain concepts. Everything in CAD.
  */
-export function MotelDetail({ business, onClose }: { business: Business; onClose: () => void }) {
+export function MotelDetail({
+  business,
+  onClose,
+  onSynced,
+}: {
+  business: Business;
+  onClose: () => void;
+  /** Called after a real Little Hotelier export is uploaded, with the refreshed business. */
+  onSynced?: (b: Business) => void;
+}) {
   const [range, setRange] = useState(1);
   const [kpiMode, setKpiMode] = useState<KpiMode>("occupancy");
   const [sheet, setSheet] = useState<null | "reviews" | "hk">(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const hk = housekeepingSummary(NORTHWOOD_ROOMS);
   const m = hotelMetricsFor(business);
   const stats = motelChannelStats(business);
+
+  // Drop your real Little Hotelier export onto the existing motel: occupancy / rate / revenue
+  // become real, the booking-mix estimate + everything else stays. Degrades honestly on a bad file.
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-uploading the same file
+    if (!file) return;
+    setUploading(true);
+    setUploadErr(null);
+    try {
+      const parsed = await parseHotelFile(file, { rooms: business.rooms ?? 21 });
+      const refreshed = refreshMotelFromImport(business, parsed);
+      upsertImported(refreshed);
+      onSynced?.(refreshed);
+    } catch (err) {
+      setUploadErr(err instanceof Error ? err.message : "Couldn't read that file. Check the columns and try again.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   if (!m || !business.hotelSeries) return null;
 
   const hs = business.hotelSeries;
@@ -89,15 +126,47 @@ export function MotelDetail({ business, onClose }: { business: Business; onClose
       </div>
 
       <div className="no-scrollbar flex-1 space-y-5 overflow-y-auto px-4 pb-10">
-        {/* Little Hotelier sync pill — his actual tool, framed as the live source */}
-        {business.pms && (
-          <div className="flex items-center gap-2 rounded-full border border-up/20 bg-up/[0.07] px-3 py-2">
-            <RefreshCw size={13} className="text-up" />
-            <span className="text-[12px] font-medium text-white/70">
-              Synced from <span className="font-semibold text-white">{business.pms}</span> · updates every morning
+        {/* Real-data sync — drop the Little Hotelier export and the motel runs on the owner's
+            real occupancy/rate/revenue. Honest about modeled-vs-real either way. */}
+        <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={onFile} className="hidden" />
+        {business.dataReal ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-up/25 bg-up/[0.08] px-3 py-2.5">
+            <CheckCircle2 size={15} className="shrink-0 text-up" />
+            <span className="min-w-0 flex-1 text-[12px] font-medium text-white/75">
+              Your real numbers · from <span className="font-semibold text-white">{business.pms ?? "your PMS"}</span>{" "}
+              <span className="text-white/45">
+                ({shortDate(hs[0].date)}–{shortDate(today.date)})
+              </span>
             </span>
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="shrink-0 text-[11px] font-semibold text-up/80 active:scale-95 disabled:opacity-50"
+            >
+              {uploading ? "Reading…" : "Update"}
+            </button>
           </div>
+        ) : (
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="flex w-full items-center gap-3 rounded-2xl border border-brass/25 bg-brass/[0.07] px-3.5 py-3 text-left active:scale-[0.99] disabled:opacity-60"
+          >
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brass/15">
+              {uploading ? <Loader2 size={17} className="animate-spin text-brass" /> : <Upload size={17} className="text-brass" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold text-white">
+                {uploading ? "Reading your export…" : `Upload your ${business.pms ?? "PMS"} export`}
+              </p>
+              <p className="text-[11.5px] leading-snug text-white/45">
+                These numbers are modeled — drop your real occupancy, rate &amp; revenue to make it yours
+              </p>
+            </div>
+            <ChevronRight size={18} className="shrink-0 text-white/30" />
+          </button>
         )}
+        {uploadErr && <p className="-mt-2 px-1 text-[11.5px] text-down/90">{uploadErr}</p>}
 
         {/* Hero — tonight */}
         <div className="px-1">
@@ -183,8 +252,17 @@ export function MotelDetail({ business, onClose }: { business: Business; onClose
 
         {/* WHERE YOUR BOOKINGS COME FROM — the hero of the demo */}
         {stats && (
-          <Section title="Where your bookings come from" hint="last 30 days">
+          <Section
+            title="Where your bookings come from"
+            hint={business.channelEstimated ? "estimated · last 30 days" : "last 30 days"}
+          >
             <Card className="p-5">
+              {business.channelEstimated && (
+                <p className="mb-4 rounded-xl bg-white/[0.04] px-3 py-2 text-[11px] leading-snug text-white/45">
+                  Estimated booking mix — your {business.pms ?? "PMS"} export carries occupancy &amp; revenue, not the
+                  per-channel split. Tell us your real sources and this commission read gets exact.
+                </p>
+              )}
               <Channel label="Direct" share={business.channelMix!.direct} rev={stats.directRev} fee={0} color="#34c79a" note="yours — no commission" />
               <Channel label="Booking.com" share={business.channelMix!.bookingCom} rev={stats.bookingComRev} fee={stats.bookingComFee} color="#1f6fb2" />
               <Channel label="Expedia" share={business.channelMix!.expedia} rev={stats.expediaRev} fee={stats.expediaFee} color="#b4793a" />
@@ -268,8 +346,17 @@ export function MotelDetail({ business, onClose }: { business: Business; onClose
         </Section>
 
         <p className="px-1 text-[11px] leading-relaxed text-white/35">
-          Modeled on {business.name}'s public profile. Connect {business.pms ?? "your channel manager"} and Helm
-          reads your real occupancy, rate, and channel mix every morning — you type nothing.
+          {business.dataReal ? (
+            <>
+              Running on your real occupancy, rate &amp; revenue from {business.pms ?? "your channel manager"}. Booking
+              mix is still estimated — confirm your sources and Helm reads the rest every morning, you type nothing.
+            </>
+          ) : (
+            <>
+              Modeled on {business.name}'s public profile. Upload your {business.pms ?? "channel manager"} export above —
+              Helm then reads your real occupancy, rate, and revenue every morning, you type nothing.
+            </>
+          )}
         </p>
       </div>
 

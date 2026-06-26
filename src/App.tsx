@@ -379,7 +379,7 @@ export default function App() {
           // Independent motels get the owner-operator view (occupancy / rate / channels / OTA fees);
           // flagged chain properties get the RevPAR-Index / GOP / PIP command view.
           return h.independent ? (
-            <MotelDetail business={h} onClose={() => setOpenHotel(null)} />
+            <MotelDetail business={h} onClose={() => setOpenHotel(null)} onSynced={mergeBusiness} />
           ) : (
             <HotelDetail business={h} onClose={() => setOpenHotel(null)} />
           );

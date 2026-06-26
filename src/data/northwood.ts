@@ -154,6 +154,9 @@ export function buildNorthwoodMotel(asOf: Date = localMidnight()): Business {
     reviewCount: 128,
     independent: true,
     channelMix: NORTHWOOD_CHANNELS,
+    // Modeled from the property's public OTA footprint, not a commission feed — labeled as an
+    // estimate in the UI until the owner confirms his real booking sources.
+    channelEstimated: true,
     pms: "Little Hotelier",
     ownerName: "Sam",
     // No STR feed, no P&L upload — honest about both (the motel UI leans on neither).

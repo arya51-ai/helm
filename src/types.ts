@@ -82,6 +82,13 @@ export interface Business {
   /** Independent-only: where the bookings come from + what each OTA charges — the data behind the
    *  commission-leakage read. */
   channelMix?: ChannelMix;
+  /** Independent-only: true when `channelMix` is a modeled estimate (no commission feed — a daily
+   *  PMS export carries occupancy/rate/revenue but not the per-channel split), so the UI labels the
+   *  booking-mix read as an estimate rather than measured. */
+  channelEstimated?: boolean;
+  /** Hotel/motel: true when `hotelSeries` came from a real uploaded export (vs a modeled demo
+   *  series). Flips the "Modeled on public profile" framing to "your real numbers". */
+  dataReal?: boolean;
   /** Independent-only: the property the owner sends through a channel manager (e.g. Little
    *  Hotelier), shown as the live "synced from" source. */
   pms?: string;

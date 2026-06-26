@@ -302,6 +302,26 @@ export function buildHotelFromImport(parsed: ParsedHotelImport, meta: HotelMeta)
   };
 }
 
+/**
+ * Splice a real uploaded series into an existing independent-motel `Business`, keeping its identity
+ * (name, location, channel mix, PMS, CAD currency) and replacing only the modeled occupancy/rate/
+ * revenue with the owner's real numbers. This is the "drive my existing view with real data" path —
+ * an owner-operator (e.g. Sam / Northwood) opens his motel and drops his Little Hotelier export.
+ *
+ * A daily PMS export carries occupancy / ADR / room revenue but NOT the per-channel commission
+ * split, so `channelMix` stays the modeled estimate and we flag it (`channelEstimated`) so the UI
+ * labels the booking-mix read honestly. `dataReal` flips the "modeled on public profile" framing.
+ */
+export function refreshMotelFromImport(base: Business, parsed: ParsedHotelImport): Business {
+  return {
+    ...base,
+    series: parsed.series,
+    hotelSeries: parsed.hotelSeries,
+    dataReal: true,
+    channelEstimated: true,
+  };
+}
+
 // ── Manual entry: synthesize a believable trailing series from a few real numbers ────
 const DOW = [0.7, 0.9, 1.04, 1.07, 1.12, 1.06, 0.78]; // Sun..Sat, business-travel shape
 
