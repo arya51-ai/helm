@@ -15,7 +15,7 @@ import type { Business, HotelDay } from "../types";
 import { hotelMetricsFor } from "../lib/hotelAnalytics";
 import { motelChannelStats, daysToSummerfest } from "../lib/motelInsights";
 import { parseHotelFile, refreshMotelFromImport, type ParsedHotelImport } from "../lib/hotelImport";
-import { upsertImported } from "../data/source";
+import { upsertImported, removeImported } from "../data/source";
 import { money, pct, shortDate, weekday } from "../lib/format";
 import { Card, Delta, cx } from "./ui";
 import { AreaTrend } from "./charts";
@@ -42,11 +42,15 @@ export function MotelDetail({
   business,
   onClose,
   onSynced,
+  onReset,
 }: {
   business: Business;
   onClose: () => void;
   /** Called after a real Little Hotelier export is uploaded, with the refreshed business. */
   onSynced?: (b: Business) => void;
+  /** Called after the uploaded data is dropped — re-runs the load pipeline so the modeled
+   *  sample baseline resurfaces in place (overlay stays open). */
+  onReset?: () => void;
 }) {
   const [range, setRange] = useState(1);
   const [kpiMode, setKpiMode] = useState<KpiMode>("occupancy");
@@ -85,6 +89,12 @@ export function MotelDetail({
     upsertImported(refreshed);
     onSynced?.(refreshed);
     setPending(null);
+  }
+
+  // Drop the uploaded data → the modeled sample baseline resurfaces (re-demo / bad-file recovery).
+  function resetToSample() {
+    removeImported(business.id);
+    onReset?.();
   }
 
   if (!m || !business.hotelSeries) return null;
@@ -367,6 +377,14 @@ export function MotelDetail({
             </>
           )}
         </p>
+        {business.dataReal && (
+          <button
+            onClick={resetToSample}
+            className="mx-1 w-fit text-[11px] font-medium text-white/35 underline-offset-2 hover:underline active:scale-95"
+          >
+            Reset to sample data
+          </button>
+        )}
       </div>
 
       {sheet === "reviews" && <ReviewsSheet business={business} onClose={() => setSheet(null)} />}

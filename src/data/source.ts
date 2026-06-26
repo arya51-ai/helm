@@ -76,6 +76,20 @@ export function clearImported(): void {
 }
 
 /**
+ * Drop the locally-imported copy for ONE id, leaving its seed layer intact — so an uploaded
+ * business reverts to its modeled sample baseline (unlike `removeBusiness`, which hides it for
+ * good). Used by "reset to sample data": lets an owner re-run the upload or recover from a bad file.
+ */
+export function removeImported(id: string): void {
+  try {
+    const list = readImported().filter((b) => b.id !== id);
+    localStorage.setItem(LS_KEY, JSON.stringify(list));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
  * Remove a business from the owner's view. Drops any locally-imported copy, clears its
  * economics/profile override, and records the id in the removed set — so a sample- or
  * file-sourced business stays gone on reload too. Reversible via `restoreBusiness`.
