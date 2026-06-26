@@ -14,7 +14,7 @@ import {
 import type { Business, HotelDay } from "../types";
 import { hotelMetricsFor } from "../lib/hotelAnalytics";
 import { motelChannelStats, daysToSummerfest } from "../lib/motelInsights";
-import { parseHotelFile, refreshMotelFromImport } from "../lib/hotelImport";
+import { parseHotelFile, refreshMotelFromImport, type ParsedHotelImport } from "../lib/hotelImport";
 import { upsertImported } from "../data/source";
 import { money, pct, shortDate, weekday } from "../lib/format";
 import { Card, Delta, cx } from "./ui";
@@ -53,13 +53,15 @@ export function MotelDetail({
   const [sheet, setSheet] = useState<null | "reviews" | "hk">(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [pending, setPending] = useState<ParsedHotelImport | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const hk = housekeepingSummary(NORTHWOOD_ROOMS);
   const m = hotelMetricsFor(business);
   const stats = motelChannelStats(business);
 
-  // Drop your real Little Hotelier export onto the existing motel: occupancy / rate / revenue
-  // become real, the booking-mix estimate + everything else stays. Degrades honestly on a bad file.
+  // Drop your real Little Hotelier export onto the motel. We parse it, then show a "here's what we
+  // read" review BEFORE replacing the view — so a wonky column or empty export can't silently swap
+  // his numbers mid-demo. Confirming commits; the booking-mix estimate + everything else stays.
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-uploading the same file
@@ -68,14 +70,21 @@ export function MotelDetail({
     setUploadErr(null);
     try {
       const parsed = await parseHotelFile(file, { rooms: business.rooms ?? 21 });
-      const refreshed = refreshMotelFromImport(business, parsed);
-      upsertImported(refreshed);
-      onSynced?.(refreshed);
+      setPending(parsed); // review first — don't commit yet
     } catch (err) {
       setUploadErr(err instanceof Error ? err.message : "Couldn't read that file. Check the columns and try again.");
     } finally {
       setUploading(false);
     }
+  }
+
+  // Confirmed in the review sheet → splice the real series in, persist, and update live.
+  function confirmUpload() {
+    if (!pending) return;
+    const refreshed = refreshMotelFromImport(business, pending);
+    upsertImported(refreshed);
+    onSynced?.(refreshed);
+    setPending(null);
   }
 
   if (!m || !business.hotelSeries) return null;
@@ -362,6 +371,91 @@ export function MotelDetail({
 
       {sheet === "reviews" && <ReviewsSheet business={business} onClose={() => setSheet(null)} />}
       {sheet === "hk" && <HousekeepingBoard business={business} onClose={() => setSheet(null)} />}
+      {pending && (
+        <UploadReview
+          parsed={pending}
+          pms={business.pms ?? "your export"}
+          onConfirm={confirmUpload}
+          onCancel={() => setPending(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** "Here's what we read" — shown after parsing, before the real numbers replace the view. Surfaces
+ *  the range, the headline averages, and the honest "computed / estimated" notes from the parser. */
+function UploadReview({
+  parsed,
+  pms,
+  onConfirm,
+  onCancel,
+}: {
+  parsed: ParsedHotelImport;
+  pms: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const t = parsed.totals;
+  // The parser's derived notes are chain-flavored (RevPAR Index / comp-set / GOP / labor) — concepts
+  // an independent motel owner never sees. Keep only the occupancy/rate derivations, then state the
+  // one caveat that IS real for a motel: the booking-channel mix isn't in a daily export.
+  const notes = [
+    ...parsed.derived.filter((d) => !/revpar|rgi|comp|str|gop|labor|margin/i.test(d)),
+    "Booking channel mix stays an estimate — a daily export carries occupancy & revenue, not the per-channel commission split.",
+  ];
+  return (
+    <div className="fixed inset-0 z-50 mx-auto flex max-w-[440px] flex-col justify-end bg-black/60" onClick={onCancel}>
+      <div
+        className="rounded-t-3xl bg-[#0c2c47] px-5 pb-8 pt-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
+        <div className="flex items-center gap-2">
+          <CheckCircle2 size={18} className="text-up" />
+          <h2 className="text-[16px] font-bold text-white">Here's what we read</h2>
+        </div>
+        <p className="mt-1 text-[12.5px] text-white/50">
+          {t.days} nights from your {pms} · {shortDate(parsed.range.from)}–{shortDate(parsed.range.to)}
+        </p>
+
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <ReviewStat label="Avg occupancy" value={pct(t.avgOccupancy, 0)} />
+          <ReviewStat label="Avg rate" value={ca(t.avgAdr)} />
+          <ReviewStat label="Total revenue" value={ca(t.totalRevenue)} />
+        </div>
+
+        <div className="mt-4 space-y-1.5 rounded-2xl bg-white/[0.04] p-3.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Good to know</p>
+          {notes.map((d, i) => (
+            <p key={i} className="text-[12px] leading-snug text-white/60">· {d}</p>
+          ))}
+        </div>
+
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={onCancel}
+            className="flex-1 rounded-2xl bg-white/[0.07] py-3 text-[14px] font-semibold text-white/70 active:scale-[0.98]"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-[1.6] rounded-2xl bg-up py-3 text-[14px] font-bold text-[#04241a] active:scale-[0.98]"
+          >
+            Use this data
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-white/[0.05] p-3">
+      <p className="text-[10.5px] font-medium text-white/45">{label}</p>
+      <p className="mt-1 text-[16px] font-bold tracking-tight text-white tabular-nums">{value}</p>
     </div>
   );
 }
