@@ -363,10 +363,13 @@ export function answerQuestion(raw: string, ctx: AskContext): AskAnswer {
 
   // 1c) Independent-motel questions that didn't name the property (fees, pricing, season, occupancy).
   const indMotel = ctx.businesses.find((b) => b.independent && b.hotelSeries?.length);
+  // NOTE: deliberately excludes "cash" — an empire-level cash question ("where should I put my
+  // cash?") must reach the capital-allocation answer below, not get shadowed into a motel pacing
+  // read. A cash question that names the motel still routes to it via findBusiness/block 6b.
   if (
     indMotel &&
     !biz &&
-    /\b(booking\.?com|expedia|ota|otas|commission|fee|fees|direct|rate|rates|price|pricing|raise|summerfest|weekend|occupanc|full|summer|season|pacing|pace|cash)\b/.test(q)
+    /\b(booking\.?com|expedia|ota|otas|commission|fee|fees|direct|rate|rates|price|pricing|raise|summerfest|weekend|occupanc|full|summer|season|pacing|pace)\b/.test(q)
   ) {
     return motelAnswer(indMotel, q);
   }
