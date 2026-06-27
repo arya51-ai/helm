@@ -29,6 +29,9 @@ docs/DEMO_ROADMAP.md
 docs/HORMOZI_LEVERAGE_CASE_STUDY.md
 docs/DATA_CONNECTION_STRATEGY.md
 
+# Internal-only docs (discovery notes, demo runbooks, competitive teardowns). Local, never pushed.
+docs/private/
+
 # Misc
 .DS_Store
 *.log

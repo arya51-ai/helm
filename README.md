@@ -10,7 +10,12 @@
   <img alt="status" src="https://img.shields.io/badge/status-prototype-7c6cf5" />
   <img alt="pwa" src="https://img.shields.io/badge/PWA-installable-2bb673" />
   <img alt="stack" src="https://img.shields.io/badge/React%2018%20·%20Vite%20·%20TypeScript-0a0b10" />
+  <img alt="license" src="https://img.shields.io/badge/license-proprietary%20·%20all%20rights%20reserved-b3413a" />
 </p>
+
+> **Source-available, not open source.** This repository is published for reference and
+> portfolio review only. © 2026 Arya Mehta. All rights reserved. No copying, reuse, modification,
+> or redistribution without prior written permission. See [LICENSE](LICENSE).
 
 ---
 
