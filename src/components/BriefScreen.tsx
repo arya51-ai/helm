@@ -8,9 +8,15 @@ import {
   ChevronRight,
   Check,
   CircleDashed,
+  Calculator,
+  ThumbsUp,
+  ThumbsDown,
+  EyeOff,
 } from "lucide-react";
 import { Building2, ChevronRight as ChevronRightIcon } from "lucide-react";
 import type { Business, Insight, InsightKind } from "../types";
+import type { Verdict } from "../data/verdicts";
+import { BacktestReceipts } from "./BacktestReceipts";
 import type { Metrics, EmpireSummary } from "../lib/analytics";
 import type { DataSource } from "../data/source";
 import { hotelPortfolioMetrics } from "../lib/hotelAnalytics";
@@ -36,16 +42,23 @@ export function InsightCard({
   onAction,
   onOpen,
   onDraft,
+  verdict,
+  onVerdict,
 }: {
   insight: Insight;
   onAction: (msg: string) => void;
   onOpen?: () => void;
   /** When provided, the action opens the agentic draft/confirm sheet instead of an instant toast. */
   onDraft?: () => void;
+  /** Owner's current verdict on this card (drives the collapsed confirmed/dismissed state). */
+  verdict?: Verdict;
+  /** Set/clear the owner's verdict — pass null to undo. When provided, the judge controls render. */
+  onVerdict?: (v: Verdict | null) => void;
 }) {
   const s = KIND_STYLE[insight.kind];
   const Icon = s.icon;
   const [done, setDone] = useState(false);
+  const [showMath, setShowMath] = useState(false);
   return (
     <Card className="p-4">
       <div className="flex gap-3">
@@ -72,6 +85,39 @@ export function InsightCard({
             {insight.title}
           </h3>
           <p className="mt-1 text-[13px] leading-relaxed text-white/55">{insight.detail}</p>
+
+          {/* "Show the math" — the arithmetic behind the headline number, so the read is
+              obviously computed, not a black-box claim. */}
+          {insight.math && insight.math.length > 0 && (
+            <div className="mt-2">
+              <button
+                onClick={() => setShowMath((v) => !v)}
+                aria-expanded={showMath}
+                className="inline-flex items-center gap-1 text-[12px] font-semibold text-brass active:scale-95"
+              >
+                <Calculator size={13} aria-hidden />
+                {showMath ? "Hide the math" : "Show the math"}
+              </button>
+              {showMath && (
+                <div className="mt-2 space-y-1 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                  {insight.math.map((row, idx) => (
+                    <div
+                      key={idx}
+                      className={cx(
+                        "flex items-baseline justify-between gap-3 text-[12px]",
+                        row.kind === "formula" && "mt-1.5 border-t border-white/[0.06] pt-1.5 font-semibold",
+                      )}
+                    >
+                      <span className={cx(row.kind === "formula" ? "italic text-white/55" : "text-white/45")}>
+                        {row.label}
+                      </span>
+                      <span className="shrink-0 tabular-nums text-white/85">{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {insight.action && (
             <div className="mt-3 flex items-center gap-2">
@@ -101,6 +147,68 @@ export function InsightCard({
                 >
                   Open <ChevronRight size={15} />
                 </button>
+              )}
+            </div>
+          )}
+
+          {/* Owner as judge — confirm / not-useful / dismiss. Tunes tomorrow's ranked feed and
+              tells the AI to stop resurfacing a read the owner rejected. */}
+          {onVerdict && (
+            <div className="mt-3 flex items-center gap-2 border-t border-white/[0.06] pt-2.5">
+              {verdict ? (
+                <>
+                  <span
+                    className={cx(
+                      "inline-flex items-center gap-1 text-[11.5px] font-semibold",
+                      verdict === "confirmed" ? "text-up" : "text-white/45",
+                    )}
+                  >
+                    {verdict === "confirmed" ? (
+                      <>
+                        <ThumbsUp size={12} /> Marked useful
+                      </>
+                    ) : verdict === "dismissed" ? (
+                      <>
+                        <EyeOff size={12} /> Dismissed
+                      </>
+                    ) : (
+                      <>
+                        <ThumbsDown size={12} /> Not useful
+                      </>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => onVerdict(null)}
+                    className="ml-auto text-[11.5px] font-medium text-white/40 underline-offset-2 hover:underline active:scale-95"
+                  >
+                    Undo
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-[11px] text-white/30">Useful?</span>
+                  <button
+                    onClick={() => onVerdict("confirmed")}
+                    aria-label="Mark useful"
+                    className="grid h-7 w-7 place-items-center rounded-full bg-white/[0.05] text-white/55 active:scale-90"
+                  >
+                    <ThumbsUp size={14} />
+                  </button>
+                  <button
+                    onClick={() => onVerdict("not-useful")}
+                    aria-label="Mark not useful"
+                    className="grid h-7 w-7 place-items-center rounded-full bg-white/[0.05] text-white/55 active:scale-90"
+                  >
+                    <ThumbsDown size={14} />
+                  </button>
+                  <button
+                    onClick={() => onVerdict("dismissed")}
+                    aria-label="Dismiss this insight"
+                    className="ml-auto inline-flex items-center gap-1 text-[11.5px] font-medium text-white/35 active:scale-95"
+                  >
+                    <EyeOff size={12} /> Dismiss
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -200,6 +308,8 @@ export function BriefScreen({
   onOpenHotels,
   onOpenHotel,
   onOpenCompare,
+  onVerdict,
+  verdictFor,
 }: {
   businesses: Business[];
   metricsBy: Record<string, Metrics>;
@@ -222,6 +332,10 @@ export function BriefScreen({
   onOpenHotel?: (id: string) => void;
   /** Open the same-brand head-to-head comparison for a unit-compare insight. */
   onOpenCompare?: (insight: Insight) => void;
+  /** Set/clear the owner's verdict on an insight (owner-as-judge). */
+  onVerdict?: (id: string, v: Verdict | null) => void;
+  /** Current verdict for an insight id, if any. */
+  verdictFor?: (id: string) => Verdict | undefined;
 }) {
   const ops = businesses.filter((b) => b.type !== "hotel");
   const hotels = businesses.filter((b) => b.type === "hotel");
@@ -231,8 +345,11 @@ export function BriefScreen({
   const today = new Date();
   const hour = today.getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const needs = insights.filter((i) => i.kind === "alert").length;
-  const top = insights.slice(0, 4);
+  // Honor the owner's verdicts: a dismissed card drops out of the Brief entirely (it stays
+  // recoverable in "See all"). not-useful / confirmed only re-rank (handled upstream in App).
+  const visible = insights.filter((i) => verdictFor?.(i.id) !== "dismissed");
+  const needs = visible.filter((i) => i.kind === "alert").length;
+  const top = visible.slice(0, 4);
 
   // Be honest about recency: POS data usually lags a day, so the headline number
   // is the latest completed close, not literally "today".
@@ -356,10 +473,15 @@ export function BriefScreen({
               onAction={onToast}
               onOpen={i.businessId ? () => onOpenBusiness(i.businessId!) : undefined}
               onDraft={i.action ? () => (i.id.startsWith("unit-compare") ? onOpenCompare?.(i) : onDraft(i)) : undefined}
+              verdict={verdictFor?.(i.id)}
+              onVerdict={onVerdict ? (v) => onVerdict(i.id, v) : undefined}
             />
           ))}
         </div>
       </section>
+
+      {/* Helm's track record — receipts on past calls, lights up once history accrues */}
+      <BacktestReceipts businesses={businesses} metricsBy={metricsBy} />
 
       {/* Businesses quick row */}
       <section>

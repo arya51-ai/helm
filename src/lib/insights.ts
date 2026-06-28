@@ -55,7 +55,14 @@ export function buildInsights(
       priority: 80,
       metric: `${multiple.toFixed(1)}×`,
       metricUp: true,
-      action: { label: "See the math", done: "Opening capital plan ✓" },
+      math: [
+        { label: "Idle cash", value: usd(ctx.idleCash) },
+        { label: `${best.name} ROIC`, value: pct(bestRoic, 0) },
+        { label: "Market ROIC", value: pct(mktRoic, 0) },
+        { label: `Into ${best.name} / yr`, value: usd(upside), kind: "formula" },
+        { label: "Left in market / yr", value: usd(marketAlt), kind: "formula" },
+      ],
+      action: { label: "Draft a capital plan", done: "Capital plan drafted ✓" },
     });
   }
 
@@ -103,6 +110,11 @@ export function buildInsights(
         priority: 48,
         metric: signedPct(m.wow, 0),
         metricUp: up,
+        math: [
+          { label: "Last 7 days", value: usd(m.weekToDate) },
+          { label: "Prior 7 days", value: usd(m.prevWeek) },
+          { label: "Week over week", value: signedPct(m.wow, 0), kind: "formula" },
+        ],
         action: { label: "Open business", done: "Opening business ✓" },
       });
     }
@@ -135,6 +147,12 @@ function anomalyToInsight(a: Anomaly): Insight {
       priority: (down ? 86 : 60) + Math.min(10, Math.abs(a.z) * 3),
       metric: signedPct(a.vsExpected, 0),
       metricUp: !down,
+      math: [
+        { label: "Actual", value: usd(a.actual) },
+        { label: "Expected", value: usd(a.expected) },
+        { label: "vs expected", value: signedPct(a.vsExpected, 0), kind: "formula" },
+        { label: "Deviation", value: `${sigma}σ` },
+      ],
       action: down ? downAction : upAction,
     };
   }
@@ -156,6 +174,12 @@ function anomalyToInsight(a: Anomaly): Insight {
     priority: (down ? 90 : 64) + Math.min(10, Math.abs(a.z) * 3),
     metric: signedPct(a.vsExpected, 0),
     metricUp: !down,
+    math: [
+      { label: "Actual", value: usd(a.actual) },
+      { label: "Expected", value: usd(a.expected) },
+      { label: "vs expected", value: signedPct(a.vsExpected, 0), kind: "formula" },
+      { label: "Deviation", value: `${sigma}σ` },
+    ],
     action: down ? downAction : upAction,
   };
 }

@@ -32,6 +32,11 @@ export function buildFuelInsights(stations: Business[]): Insight[] {
         priority: 86,
         metric: `${m.monthCpg.toFixed(0)}¢/gal`,
         metricUp: false,
+        math: [
+          { label: "CPG", value: `${m.monthCpg.toFixed(1)}¢` },
+          { label: "Weekly trend", value: signedPct(m.cpgTrend7), kind: "formula" },
+          { label: "Gallons / day", value: Math.round(m.avgGallonsDay).toLocaleString() },
+        ],
         action: { label: "Review pricing", done: "Opening fuel pricing ✓" },
       });
     }
@@ -50,6 +55,11 @@ export function buildFuelInsights(stations: Business[]): Insight[] {
         priority: 80,
         metric: `${usd(m.insidePerGallon, true)}/gal`,
         metricUp: false,
+        math: [
+          { label: "Inside per gallon", value: usd(m.insidePerGallon, true) },
+          { label: "Fuel customers / day", value: `~${upliftCustomers.toLocaleString()}` },
+          { label: "$1 attach lift / mo", value: usdCompact(upliftCustomers * 30), kind: "formula" },
+        ],
         action: { label: "Draft attach plan", done: "Attach plan drafted ✓" },
       });
     }
@@ -68,6 +78,10 @@ export function buildFuelInsights(stations: Business[]): Insight[] {
         priority: 64,
         metric: `${pct(m.monthInsideMarginPct, 0)} inside`,
         metricUp: true,
+        math: [
+          { label: "Fuel share of profit", value: pct(m.fuelProfitShare, 0) },
+          { label: "Inside margin", value: pct(m.monthInsideMarginPct, 0), kind: "formula" },
+        ],
       });
     }
 
@@ -84,6 +98,11 @@ export function buildFuelInsights(stations: Business[]): Insight[] {
         priority: 58,
         metric: signedPct(m.gallonsTrend7, 0),
         metricUp: true,
+        math: [
+          { label: "Gallons / day", value: `~${Math.round(m.avgGallonsDay).toLocaleString()}` },
+          { label: "Weekly trend", value: signedPct(m.gallonsTrend7, 0), kind: "formula" },
+          { label: "CPG", value: `${m.monthCpg.toFixed(1)}¢` },
+        ],
       });
     }
   }
@@ -109,6 +128,11 @@ export function buildFuelInsights(stations: Business[]): Insight[] {
         priority: 72,
         metric: `${usd(gap, true)}/gal gap`,
         metricUp: false,
+        math: [
+          { label: `${best.s.shortName ?? best.s.name} inside/gal`, value: usd(best.m.insidePerGallon, true) },
+          { label: `${worst.s.shortName ?? worst.s.name} inside/gal`, value: usd(worst.m.insidePerGallon, true) },
+          { label: "Halfway lift / mo", value: usdCompact(lift / 2), kind: "formula" },
+        ],
         action: { label: "Compare stations", done: "Opening comparison ✓" },
       });
     }

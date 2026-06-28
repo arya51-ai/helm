@@ -5,6 +5,7 @@ import type { Metrics } from "../lib/analytics";
 import { usd, usdCompact, money, pct, signedPct, signedUsd, daysAgo, weekday, shortDate, currencySymbol } from "../lib/format";
 import { DISPLAY_CURRENCY, RATES_TO_USD, fromUSD } from "../lib/currency";
 import { Card, Delta, cx } from "./ui";
+import { DataHealthBadge } from "./DataHealthBadge";
 import { AreaTrend, DayBars, HBars, DowBars, CalendarHeatmap, TrendRibbon, ForecastChart } from "./charts";
 import { benchmarkFor } from "../lib/benchmark";
 import { expectedFor, dowAverages, rangeBreakdown } from "../lib/breakdowns";
@@ -187,6 +188,10 @@ export function BusinessDetail({
             </p>
           )}
         </div>
+
+        {/* Persistent trust badge — coverage / freshness for the series (operating businesses;
+            a portfolio has no daily-coverage notion, so skip it). */}
+        {!isPort && <DataHealthBadge series={business.series} />}
 
         {/* Range selector */}
         <div className="flex gap-1.5 rounded-full bg-white/[0.05] p-1">

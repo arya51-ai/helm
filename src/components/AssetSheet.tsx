@@ -156,7 +156,7 @@ export function AssetSheet({
             onClick={remove}
             className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[13px] font-semibold text-down/80 active:scale-[0.98]"
           >
-            <Trash2 size={14} /> Remove
+            <Trash2 size={14} aria-hidden="true" /> Remove
           </button>
         )}
       </div>

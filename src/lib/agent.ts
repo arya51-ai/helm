@@ -8,6 +8,7 @@ import { empireAnomalies } from "./anomalies";
 import { bakedBrief } from "./bakedBrief";
 import { goalFor } from "../data/goals";
 import { list as listActions } from "../data/actions";
+import { readVerdicts } from "../data/verdicts";
 import { reviewRadarFor } from "../data/reviews";
 import { weekday, daysAgo } from "./format";
 
@@ -255,6 +256,19 @@ export function buildAgentContext(ctx: AskContext) {
       };
     });
 
+  // What the owner has judged — so the brain stops resurfacing reads they dismissed or marked
+  // not-useful, and can lean into what they confirmed. Mirrors the openLoops pattern; rides into
+  // the cached <owner_state>, adding no new call site (AI stays off by default; this is inert until
+  // a key is configured, and harmless when it is).
+  const verdicts = readVerdicts();
+  const dismissedInsights = Object.entries(verdicts)
+    .filter(([, x]) => x.verdict !== "confirmed")
+    .map(([id]) => {
+      const ins = ctx.insights.find((i) => i.id === id);
+      return { what: ins ? ins.title.slice(0, 90) : id, verdict: verdicts[id].verdict };
+    })
+    .slice(0, 8);
+
   const e = ctx.empire;
   return {
     businesses,
@@ -287,6 +301,7 @@ export function buildAgentContext(ctx: AskContext) {
     ...(Object.keys(goals).length ? { goals } : {}),
     ...(anomalies.length ? { anomalies } : {}),
     ...(openLoops.length ? { openLoops } : {}),
+    ...(dismissedInsights.length ? { dismissedInsights } : {}),
   };
 }
 

@@ -4,6 +4,7 @@ import type { Business } from "../types";
 import { fuelMetricsFor } from "../lib/fuelAnalytics";
 import { usd, usdCompact, pct, signedPct, shortDate, weekday } from "../lib/format";
 import { Card, Delta, cx } from "./ui";
+import { DataHealthBadge } from "./DataHealthBadge";
 import { AreaTrend } from "./charts";
 
 const RANGES = [
@@ -57,6 +58,9 @@ export function FuelDetail({ business, onClose }: { business: Business; onClose:
       </div>
 
       <div className="no-scrollbar flex-1 space-y-4 overflow-y-auto px-4 pb-10 pt-1">
+        {/* Persistent trust badge — coverage / freshness for the station's series */}
+        <DataHealthBadge series={business.series} />
+
         {/* Hero — gross profit this month */}
         <Card className="p-5">
           <p className="text-[12px] font-medium text-white/45">Gross profit · last 30 days</p>

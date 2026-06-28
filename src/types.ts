@@ -244,4 +244,17 @@ export interface Insight {
   metric?: string;
   metricUp?: boolean;
   action?: InsightAction;
+  /** Optional arithmetic behind the headline number — rendered in the card's "Show the math"
+   *  drawer. Each row is a pre-formatted label + value (money/pct already applied at build time);
+   *  a `formula` row renders as the emphasized equation line. The honest, checkable backing for
+   *  every insight — the Trust Layer's "show your work". */
+  math?: InsightMath[];
+}
+
+/** One row of an insight's "show the math" breakdown. */
+export interface InsightMath {
+  label: string;
+  value: string;
+  /** `formula` rows render emphasized (the equation / bottom-line); default is a plain figure. */
+  kind?: "figure" | "formula";
 }

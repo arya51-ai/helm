@@ -36,6 +36,12 @@ export function deepInsights(businesses: Business[], metricsBy: Record<string, M
         priority: recovering ? 78 : 88,
         metric: signedPct(mom.yoy, 0),
         metricUp: false,
+        math: [
+          { label: "Trailing 12 mo", value: usd(mom.lastYear) },
+          { label: "Prior year", value: usd(mom.prevYear) },
+          { label: "Year over year", value: signedPct(mom.yoy, 0), kind: "formula" },
+          { label: "Last 90 days", value: signedPct(mom.m90, 0) },
+        ],
         action: { label: recovering ? "See the trend" : "Draft a turnaround review", done: "Opening trend ✓" },
       });
     }
@@ -56,6 +62,11 @@ export function deepInsights(businesses: Business[], metricsBy: Record<string, M
         priority: 64,
         metric: pct(wk.worstGap, 0),
         metricUp: false,
+        math: [
+          { label: `${DOW[wk.worst]} avg`, value: usd(wk.byDow[wk.worst]) },
+          { label: "vs a normal day", value: pct(wk.worstGap, 0), kind: "formula" },
+          { label: `${DOW[wk.best]} (peak)`, value: `+${pct(wk.bestGap, 0)}` },
+        ],
         action: { label: "Draft a plan", done: "Draft ready ✓" },
       });
     }
@@ -76,6 +87,10 @@ export function deepInsights(businesses: Business[], metricsBy: Record<string, M
         priority: 50,
         metric: `+${pct(wk.bestGap, 0)}`,
         metricUp: true,
+        math: [
+          { label: `${DOW[wk.best]} avg`, value: usd(wk.byDow[wk.best]) },
+          { label: "vs a normal day", value: `+${pct(wk.bestGap, 0)}`, kind: "formula" },
+        ],
         action: retail
           ? { label: "Draft reorder", done: "Reorder draft created ✓" }
           : { label: "Check the schedule", done: "Opening schedule ✓" },
@@ -94,6 +109,11 @@ export function deepInsights(businesses: Business[], metricsBy: Record<string, M
         priority: 38,
         metric: `${seas.strongest.name.slice(0, 3)} ↑`,
         metricUp: true,
+        math: [
+          { label: `${seas.strongest.name} peak`, value: `${usd(seas.strongest.avg)}/day` },
+          { label: `${seas.weakest.name} trough`, value: `${usd(seas.weakest.avg)}/day` },
+          { label: "Peak-to-trough", value: pct(seas.spread, 0), kind: "formula" },
+        ],
       });
     }
   }
@@ -125,6 +145,10 @@ export function deepInsights(businesses: Business[], metricsBy: Record<string, M
         priority: 58,
         metric: pct(sm.roic, 0),
         metricUp: true,
+        math: [
+          { label: "Return on capital", value: pct(sm.roic, 0) },
+          { label: "30-day momentum", value: signedPct(starMom.m30, 0), kind: "formula" },
+        ],
         action: { label: "Open business", done: "Opening business ✓" },
       });
     }
@@ -150,6 +174,10 @@ export function deepInsights(businesses: Business[], metricsBy: Record<string, M
       priority: 46,
       metric: signedPct(Math.min(...eroding.map((x) => x.t.change)), 0),
       metricUp: false,
+      math: eroding.map((x) => ({
+        label: `${x.b.shortName ?? x.b.name} ticket`,
+        value: `${usd(x.t.now, true)} (${signedPct(x.t.change, 0)})`,
+      })),
       action: { label: "Draft a pricing test", done: "Draft ready ✓" },
     });
   }
@@ -171,6 +199,10 @@ export function deepInsights(businesses: Business[], metricsBy: Record<string, M
         priority: 44,
         metric: pct(share, 0),
         metricUp: false,
+        math: [
+          { label: `${name} last 30 days`, value: usd(top.r) },
+          { label: "Share of revenue", value: pct(share, 0), kind: "formula" },
+        ],
       });
     }
   }

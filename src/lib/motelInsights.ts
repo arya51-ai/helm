@@ -127,6 +127,16 @@ export function buildMotelInsights(b: Business): Insight[] {
     priority: 96,
     metric: ca(stats.commission),
     metricUp: false,
+    math: [
+      { label: "OTA share of rooms", value: pct(stats.otaShare, 0) },
+      { label: "Booking.com fee", value: ca(stats.bookingComFee) },
+      { label: "Expedia fee", value: ca(stats.expediaFee) },
+      { label: "Airbnb & other fee", value: ca(stats.otherFee) },
+      { label: "Commission last 30d", value: ca(stats.commission), kind: "formula" },
+      { label: "At summer pace (Jun–Sep)", value: ca(stats.seasonCommission) },
+      { label: "Shift 1-in-10 → /mo back", value: ca(stats.shift10Monthly), kind: "formula" },
+      { label: "Shift 1-in-10 → season", value: ca(stats.shift10Season) },
+    ],
     action: { label: "Draft a direct-booking nudge", done: "Direct-booking offer drafted ✓" },
   });
 
@@ -147,6 +157,12 @@ export function buildMotelInsights(b: Business): Insight[] {
     priority: 92,
     metric: `${hw.days}d`,
     metricUp: true,
+    math: [
+      { label: "Days out", value: `${hw.days}` },
+      { label: "Rate lift / night", value: ca(liftPerNight) },
+      { label: "Rooms", value: `${b.rooms ?? 22}` },
+      { label: "Long-weekend upside", value: ca(longWeekendLift), kind: "formula" },
+    ],
     action: { label: "Set the Summerfest rate", done: "Summerfest rate plan drafted ✓" },
   });
 
@@ -162,6 +178,11 @@ export function buildMotelInsights(b: Business): Insight[] {
     priority: 80,
     metric: pct(m.todayOcc, 0),
     metricUp: true,
+    math: [
+      { label: "Occupancy tonight", value: pct(m.todayOcc, 0) },
+      { label: "ADR tonight", value: ca(m.todayAdr) },
+      { label: "RevPAR 30-day trend", value: signedPct(m.revparTrend30, 0), kind: "formula" },
+    ],
   });
 
   return out;

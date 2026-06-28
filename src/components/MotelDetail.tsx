@@ -21,6 +21,7 @@ import { Card, Delta, cx } from "./ui";
 import { AreaTrend } from "./charts";
 import { ReviewsSheet } from "./ReviewsSheet";
 import { HousekeepingBoard } from "./HousekeepingBoard";
+import { DataHealthBadge } from "./DataHealthBadge";
 import { NORTHWOOD_ROOMS, housekeepingSummary } from "../data/housekeeping";
 
 const RANGES = [
@@ -186,6 +187,14 @@ export function MotelDetail({
           </button>
         )}
         {uploadErr && <p className="-mt-2 px-1 text-[11.5px] text-down/90">{uploadErr}</p>}
+
+        {/* Persistent trust badge — coverage / freshness + real-vs-modeled, always on screen */}
+        <DataHealthBadge
+          series={business.series}
+          modeled={!business.dataReal}
+          modeledLabel={`Modeled on ${business.name}'s public profile — upload your ${business.pms ?? "PMS"} export to make it real`}
+          source={business.pms}
+        />
 
         {/* Hero — tonight */}
         <div className="px-1">

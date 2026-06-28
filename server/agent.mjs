@@ -400,8 +400,10 @@ export async function handleAsk({ question, context, env: e = env() }, res) {
     res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
     res.end();
   } catch (err) {
-    // Client treats any error frame as "fall back to the rule engine".
-    res.write(`data: ${JSON.stringify({ error: errMsg(err) })}\n\n`);
+    // Client treats any error frame as "fall back to the rule engine"; it only needs a
+    // truthy error. Keep the detailed message server-side only — don't leak it on the wire.
+    console.error("[agent] /ask error:", errMsg(err));
+    res.write(`data: ${JSON.stringify({ error: "unavailable" })}\n\n`);
     res.end();
   }
 }
@@ -567,7 +569,9 @@ export async function handleBrief({ context, previousBrief = null, env: e = env(
     recordBrief();
     return { available: true, text, model: "opus", reason };
   } catch (err) {
-    return { available: true, error: errMsg(err) };
+    // Detailed reason stays in server logs; the client only needs a truthy error to fall back.
+    console.error("[agent] /brief error:", errMsg(err));
+    return { available: true, error: "unavailable" };
   }
 }
 
@@ -603,7 +607,9 @@ export async function handleDraft({ action, insight, context, env: e = env() }) 
       .trim();
     return { available: true, text };
   } catch (err) {
-    return { available: true, error: errMsg(err) };
+    // Detailed reason stays in server logs; the client only needs a truthy error to fall back.
+    console.error("[agent] /draft error:", errMsg(err));
+    return { available: true, error: "unavailable" };
   }
 }
 
@@ -617,8 +623,16 @@ export async function handleVision({ imageBase64, mediaType, businessType, env: 
   if (!e.configured) return { available: false };
   const data = String(imageBase64 || "");
   if (!data) return { available: false };
-  const media = String(mediaType || "image/jpeg");
+  // Payload size cap. The serverless wrappers don't run express.json's 1mb limit, so an
+  // oversized base64 image could otherwise drive a large (billed) vision call. Cap the
+  // base64 length and degrade to the no-data/unavailable shape before any Anthropic call.
+  if (data.length > 7_000_000) return { available: false };
   const type = String(businessType || "").toLowerCase();
+  // Whitelist the media_type — it flows from the request body straight into the Anthropic
+  // image block. Only Claude-supported image types are allowed; anything else → image/jpeg.
+  const ALLOWED_MEDIA = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  const reqMedia = String(mediaType || "").toLowerCase();
+  const media = ALLOWED_MEDIA.includes(reqMedia) ? reqMedia : "image/jpeg";
 
   // Pick the target shape from the business type. Hotels read RevPAR/ADR/occupancy;
   // everything else reads a sales report. Default to sales when unknown.
@@ -756,12 +770,22 @@ export function guardAgentRequest(req) {
   const h = (req && req.headers) || {};
   const get = (k) => String(h[k] || "");
 
-  // 1) Origin / Referer allowlist — only enforced when configured, so dev and any
-  //    not-yet-configured deploy keep working (and degrade gracefully, never break).
-  if (g.origins.length) {
-    const oHost = hostOf(get("origin")) || get("origin").toLowerCase();
+  // 1) Origin fail-closed — FAIL CLOSED for cross-origin browser calls on the billed
+  //    routes, even when HELM_ALLOWED_ORIGINS is unset. We ALLOW when:
+  //      (a) no Origin header at all — server-to-server / same-origin GET / curl / smoke, OR
+  //      (b) the Origin's host is in the allowlist (HELM_ALLOWED_ORIGINS), OR
+  //      (c) the Origin's host === the request's own Host header (genuinely same-origin).
+  //    Otherwise BLOCK. Net effect: even if the allowlist is forgotten in prod, a random
+  //    third-party site can't drive the billed relay, but the real app and smoke test still work.
+  const originRaw = get("origin");
+  if (originRaw) {
+    const oHost = hostOf(originRaw) || originRaw.toLowerCase();
     const refHost = hostOf(get("referer"));
-    if (!g.origins.some((a) => a === oHost || a === refHost)) {
+    const selfHost = get("host").toLowerCase(); // the host the request came in on
+    const allowed =
+      (g.origins.length && g.origins.some((a) => a === oHost || a === refHost)) ||
+      (selfHost && oHost === selfHost);
+    if (!allowed) {
       return { ok: false, status: 403, body: { available: false, error: "forbidden_origin" } };
     }
   }
@@ -774,7 +798,17 @@ export function guardAgentRequest(req) {
   }
 
   // 3) Per-IP sliding-window rate limit (always on; per-instance on serverless).
-  const ip = get("x-forwarded-for").split(",")[0].trim() || req?.socket?.remoteAddress || req?.ip || "unknown";
+  //    Derive the client IP from the most trustworthy source. The FIRST x-forwarded-for
+  //    segment is ATTACKER-CONTROLLED (the client can prepend/rotate it to get a fresh
+  //    bucket each request), so we never key on it: prefer x-real-ip (Vercel sets the true
+  //    client), else the LAST XFF hop (closest to our infra), else the socket address.
+  const xff = get("x-forwarded-for").split(",").map((s) => s.trim()).filter(Boolean);
+  const ip =
+    get("x-real-ip").trim() ||
+    (xff.length ? xff[xff.length - 1] : "") ||
+    req?.socket?.remoteAddress ||
+    req?.ip ||
+    "unknown";
   const nowMs = Date.now();
   if (_ipHits.size > 5000) _ipHits.clear(); // crude unbounded-growth guard
   const hits = (_ipHits.get(ip) || []).filter((t) => nowMs - t < g.windowMs);
@@ -800,7 +834,18 @@ export function guardAgentRequest(req) {
 
 export async function createAgentApp() {
   const app = express();
-  app.use(cors());
+  // Scope CORS to the allowlist when one is configured; otherwise reflect the
+  // request's own Origin (echoing the caller, never a hardcoded '*'). This keeps
+  // the same-origin SPA and the no-Origin smoke test working while denying random
+  // third-party browsers the Access-Control-Allow-Origin they'd need to read responses.
+  const corsOrigins = guardEnv().origins;
+  app.use(
+    cors({
+      origin: corsOrigins.length
+        ? corsOrigins.flatMap((h) => [`https://${h}`, `http://${h}`])
+        : (origin, cb) => cb(null, origin || true),
+    }),
+  );
   app.use(express.json({ limit: "1mb" }));
 
   // Gate every billed route (everything except the free /status probe) with the abuse guard.

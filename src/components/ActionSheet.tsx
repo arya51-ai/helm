@@ -97,8 +97,8 @@ export function ActionSheet({
   return (
     <div className="fixed inset-0 z-[70] mx-auto flex max-w-[440px] flex-col bg-[#0a263e]">
       <div className="flex items-center gap-3 px-4 pb-3 pt-5">
-        <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white/[0.06] active:scale-90">
-          <ChevronLeft size={20} className="text-white" />
+        <button aria-label="Close" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white/[0.06] active:scale-90">
+          <ChevronLeft size={20} className="text-white" aria-hidden="true" />
         </button>
         <div className="flex items-center gap-2">
           <HelmMark size={18} className="text-brass" />
@@ -140,7 +140,7 @@ export function ActionSheet({
           onClick={send}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-white py-3 text-[14px] font-bold text-black active:scale-[0.98]"
         >
-          <Send size={16} strokeWidth={2.4} />
+          <Send size={16} strokeWidth={2.4} aria-hidden="true" />
           {source === "claude" ? "Send it" : "Mark done"}
         </button>
         <p className="mt-2 text-center text-[11px] text-white/30">

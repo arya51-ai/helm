@@ -67,8 +67,8 @@ export function AskSheet({
   return (
     <div className="fixed inset-0 z-[60] mx-auto flex max-w-[440px] flex-col bg-[#0a263e]">
       <div className="flex items-center gap-3 px-4 pb-3 pt-5">
-        <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white/[0.06] active:scale-90">
-          <ChevronLeft size={20} className="text-white" />
+        <button aria-label="Close" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-white/[0.06] active:scale-90">
+          <ChevronLeft size={20} className="text-white" aria-hidden="true" />
         </button>
         <div className="flex items-center gap-2">
           <HelmMark size={20} className="text-brass" />
@@ -160,6 +160,7 @@ export function AskSheet({
           className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] py-1.5 pl-4 pr-1.5"
         >
           <input
+            aria-label="Ask Helm"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask Helm anything…"
@@ -167,10 +168,11 @@ export function AskSheet({
           />
           <button
             type="submit"
+            aria-label="Send"
             disabled={!input.trim() || busy}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-black active:scale-90 disabled:opacity-40"
           >
-            <ArrowUp size={18} strokeWidth={2.6} />
+            <ArrowUp size={18} strokeWidth={2.6} aria-hidden="true" />
           </button>
         </form>
       </div>

@@ -30,6 +30,12 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
         priority: 92,
         metric: `RGI ${m.monthRgi.toFixed(0)}`,
         metricUp: false,
+        math: [
+          { label: "Your RevPAR", value: usd(m.monthRevpar) },
+          { label: "Comp set RevPAR", value: usd(m.todayCompSetRevpar) },
+          { label: "RevPAR Index", value: m.monthRgi.toFixed(1) },
+          { label: "Below fair share", value: `${gap.toFixed(1)} pts`, kind: "formula" },
+        ],
         action: { label: "Revenue strategy", done: "Opening rate analysis ✓" },
       });
     } else if (m.monthRgi > 110) {
@@ -42,6 +48,12 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
         priority: 70,
         metric: `RGI ${m.monthRgi.toFixed(0)}`,
         metricUp: true,
+        math: [
+          { label: "Your RevPAR", value: usd(m.monthRevpar) },
+          { label: "Comp set RevPAR", value: usd(m.todayCompSetRevpar) },
+          { label: "RevPAR Index", value: m.monthRgi.toFixed(1) },
+          { label: "Above fair share", value: `${(m.monthRgi - 100).toFixed(1)} pts`, kind: "formula" },
+        ],
       });
     }
 
@@ -56,6 +68,11 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
         priority: 88,
         metric: signedPct(m.occVsExpected, 0),
         metricUp: false,
+        math: [
+          { label: "Occupancy today", value: pct(m.todayOcc, 0) },
+          { label: "vs normal", value: signedPct(m.occVsExpected, 0), kind: "formula" },
+          { label: "Rooms short", value: `${Math.round((h.rooms ?? 0) * Math.abs(m.occVsExpected))}` },
+        ],
         action: { label: "Push rate to OTAs", done: "Rate push drafted ✓" },
       });
     }
@@ -71,6 +88,11 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
         priority: 82,
         metric: pct(m.monthLaborPct, 0),
         metricUp: false,
+        math: [
+          { label: "Labor", value: pct(m.monthLaborPct, 0) },
+          { label: "Target band", value: "28–33%" },
+          { label: "Over target / mo", value: usdCompact(m.monthTotalRevenue * (m.monthLaborPct - 0.32)), kind: "formula" },
+        ],
         action: { label: "Staffing audit", done: "Opening labor analysis ✓" },
       });
     }
@@ -86,6 +108,11 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
         priority: 76,
         metric: pct(m.monthGopMargin, 0),
         metricUp: false,
+        math: [
+          { label: "GOP margin", value: pct(m.monthGopMargin, 0) },
+          { label: "Median band", value: "38–42%" },
+          { label: "Gap / mo", value: usdCompact(m.monthTotalRevenue * (0.38 - m.monthGopMargin)), kind: "formula" },
+        ],
         action: { label: "Margin playbook", done: "Opening playbook ✓" },
       });
     }
@@ -101,6 +128,10 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
         priority: 74,
         metric: `ADR ${signedPct(m.adrTrend7, 0)}`,
         metricUp: true,
+        math: [
+          { label: "ADR trend (7d)", value: signedPct(m.adrTrend7) },
+          { label: "Occupancy trend (7d)", value: signedPct(m.occTrend7), kind: "formula" },
+        ],
         action: { label: "Draft rate test", done: "Rate test drafted ✓" },
       });
     }
@@ -131,6 +162,12 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
         priority: 62,
         metric: signedPct(m.revparTrend30, 0),
         metricUp: true,
+        math: [
+          { label: "RevPAR", value: usd(m.monthRevpar) },
+          { label: "Occupancy", value: pct(m.monthOcc, 0) },
+          { label: "ADR", value: usd(m.monthAdr) },
+          { label: "30-day trend", value: signedPct(m.revparTrend30, 0), kind: "formula" },
+        ],
       });
     }
   }
@@ -174,6 +211,11 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
         priority: 72,
         metric: usd(gap),
         metricUp: false,
+        math: [
+          { label: `${best.h.shortName ?? best.h.name} RevPAR`, value: usd(best.m!.monthRevpar) },
+          { label: `${worst.h.shortName ?? worst.h.name} RevPAR`, value: usd(worst.m!.monthRevpar) },
+          { label: "Spread", value: usd(gap), kind: "formula" },
+        ],
         action: { label: "Compare properties", done: "Opening comparison ✓" },
       });
     }
@@ -209,6 +251,12 @@ export function buildHotelInsights(hotels: Business[]): Insight[] {
         priority: 58,
         metric: pct(weOcc, 0),
         metricUp: false,
+        math: [
+          { label: "Weekday occupancy", value: pct(wdOcc, 0) },
+          { label: "Weekend occupancy", value: pct(weOcc, 0) },
+          { label: "Lost room-nights / mo", value: `${lostRooms}` },
+          { label: "Lost revenue / mo", value: usdCompact(lostRev), kind: "formula" },
+        ],
         action: { label: "Draft weekend promo", done: "Promo drafted ✓" },
       });
     }

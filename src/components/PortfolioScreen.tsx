@@ -275,11 +275,11 @@ export function PortfolioScreen({ onToast }: { onToast: (m: string) => void }) {
               status.state === "idle"  && "border-white/10        bg-white/[0.04]   text-white/50",
             )}
           >
-            <RefreshCw size={11} className={cx(status.state === "busy" && "animate-spin")} />
+            <RefreshCw size={11} className={cx(status.state === "busy" && "animate-spin")} aria-hidden="true" />
             {status.text}
           </button>
-          <button onClick={exportCSV} className="grid h-8 w-8 place-items-center rounded-full bg-white/[0.05] text-white/50 active:scale-90" title="Export CSV">
-            <Download size={14} />
+          <button aria-label="Export CSV" onClick={exportCSV} className="grid h-8 w-8 place-items-center rounded-full bg-white/[0.05] text-white/50 active:scale-90" title="Export CSV">
+            <Download size={14} aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -305,7 +305,7 @@ export function PortfolioScreen({ onToast }: { onToast: (m: string) => void }) {
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className={cx("inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[13px] font-semibold tabular-nums",
                 t.gain >= 0 ? "bg-up/12 text-up" : "bg-down/12 text-down")}>
-                {t.gain >= 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+                {t.gain >= 0 ? <TrendingUp size={13} aria-hidden="true" /> : <TrendingDown size={13} aria-hidden="true" />}
                 {signedUsd(t.gain)} ({totalPct >= 0 ? "+" : ""}{totalPct.toFixed(1)}%)
               </span>
               <span className="text-[12px] text-white/40">total return</span>
@@ -323,10 +323,10 @@ export function PortfolioScreen({ onToast }: { onToast: (m: string) => void }) {
                 <div className="flex items-center gap-3">
                   <button onClick={() => setEditMode(m => !m)}
                     className={cx("flex items-center gap-1 text-[12px] font-semibold", editMode ? "text-brass" : "text-white/40")}>
-                    <Pencil size={11} />{editMode ? "Done" : "Edit"}
+                    <Pencil size={11} aria-hidden="true" />{editMode ? "Done" : "Edit"}
                   </button>
                   <button onClick={addHolding} className="flex items-center gap-1 text-[12px] font-semibold text-brass">
-                    <Plus size={12} />Add
+                    <Plus size={12} aria-hidden="true" />Add
                   </button>
                 </div>
               }
@@ -344,19 +344,19 @@ export function PortfolioScreen({ onToast }: { onToast: (m: string) => void }) {
                     {editMode ? (
                       <div className="space-y-2.5">
                         <div className="flex items-center justify-between">
-                          <input className="w-20 rounded-lg bg-white/[0.06] px-2 py-1.5 text-[13px] font-bold uppercase text-white focus:outline-none focus:ring-1 focus:ring-brass"
+                          <input aria-label="Ticker" className="w-20 rounded-lg bg-white/[0.06] px-2 py-1.5 text-[13px] font-bold uppercase text-white focus:outline-none focus:ring-1 focus:ring-brass"
                             value={h.ticker} onChange={e => updateHolding(i, "ticker", e.target.value)} placeholder="TICK" />
-                          <button onClick={() => setHoldings(p => p.filter((_, j) => j !== i))} className="text-white/25 hover:text-down active:scale-90"><X size={16} /></button>
+                          <button aria-label="Remove holding" onClick={() => setHoldings(p => p.filter((_, j) => j !== i))} className="text-white/25 hover:text-down active:scale-90"><X size={16} aria-hidden="true" /></button>
                         </div>
-                        <input className="w-full rounded-lg bg-white/[0.06] px-2 py-1.5 text-[12px] text-white/70 focus:outline-none focus:ring-1 focus:ring-brass"
+                        <input aria-label="Company name" className="w-full rounded-lg bg-white/[0.06] px-2 py-1.5 text-[12px] text-white/70 focus:outline-none focus:ring-1 focus:ring-brass"
                           value={h.name} onChange={e => updateHolding(i, "name", e.target.value)} placeholder="Company name" />
-                        <input className="w-full rounded-lg bg-white/[0.06] px-2 py-1.5 text-[12px] text-white/70 focus:outline-none focus:ring-1 focus:ring-brass"
+                        <input aria-label="Sector" className="w-full rounded-lg bg-white/[0.06] px-2 py-1.5 text-[12px] text-white/70 focus:outline-none focus:ring-1 focus:ring-brass"
                           value={h.sector} onChange={e => updateHolding(i, "sector", e.target.value)} placeholder="Sector" />
                         <div className="grid grid-cols-3 gap-2">
                           {([["shares","Shares"],["cost","Avg cost $"],["price","Price $"]] as const).map(([f, label]) => (
                             <div key={f}>
                               <p className="mb-1 text-[10px] text-white/35">{label}</p>
-                              <input type="number" step="any"
+                              <input type="number" step="any" aria-label={label}
                                 className="w-full rounded-lg bg-white/[0.06] px-2 py-1.5 text-[12px] text-white tabular-nums focus:outline-none focus:ring-1 focus:ring-brass"
                                 value={h[f]} onChange={e => updateHolding(i, f, e.target.value)} />
                             </div>
@@ -478,6 +478,7 @@ export function PortfolioScreen({ onToast }: { onToast: (m: string) => void }) {
                       <span className="text-[13px] font-bold tabular-nums text-brass">{Math.round(fw[k] / total * 100)}%</span>
                     </div>
                     <input type="range" min={0} max={100} value={fw[k]}
+                      aria-label={`${k} weight`}
                       onChange={e => setFw(p => ({ ...p, [k]: +e.target.value }))}
                       className="h-1 w-full cursor-pointer accent-brass" />
                   </div>
@@ -543,7 +544,7 @@ export function PortfolioScreen({ onToast }: { onToast: (m: string) => void }) {
                       <td className="py-1.5 pr-2 font-bold uppercase text-white">{h.ticker || "?"}</td>
                       {(["pe","pb","div","roe","margin","de","revG","epsG","mom12"] as const).map(f => (
                         <td key={f} className="px-1 py-1">
-                          <input type="number" step="any"
+                          <input type="number" step="any" aria-label={`${h.ticker || "holding"} ${f}`}
                             className="w-14 rounded-lg bg-white/[0.06] px-1.5 py-1 text-right text-[11px] text-white tabular-nums focus:outline-none focus:ring-1 focus:ring-brass"
                             value={h[f]} onChange={e => updateHolding(i, f, e.target.value)} />
                         </td>
@@ -584,6 +585,7 @@ export function PortfolioScreen({ onToast }: { onToast: (m: string) => void }) {
                 <span className="font-bold tabular-nums text-brass">{rho.toFixed(2)}</span>
               </div>
               <input type="range" min={0} max={90} value={Math.round(rho*100)}
+                aria-label="Average correlation"
                 onChange={e => setRho(+e.target.value / 100)}
                 className="h-1 w-full cursor-pointer accent-brass" />
             </div>
@@ -637,7 +639,7 @@ export function PortfolioScreen({ onToast }: { onToast: (m: string) => void }) {
                       <td className="py-1.5 pr-3 font-bold uppercase text-white">{h.ticker || "?"}</td>
                       {(["beta","vol"] as const).map(f => (
                         <td key={f} className="px-2 py-1 text-right">
-                          <input type="number" step="any"
+                          <input type="number" step="any" aria-label={`${h.ticker || "holding"} ${f}`}
                             className="w-16 rounded-lg bg-white/[0.06] px-2 py-1 text-right text-[11px] text-white tabular-nums focus:outline-none focus:ring-1 focus:ring-brass"
                             value={h[f]} onChange={e => updateHolding(i, f, e.target.value)} />
                         </td>
@@ -669,7 +671,7 @@ export function PortfolioScreen({ onToast }: { onToast: (m: string) => void }) {
               ] as const).map(({ label, val, set }) => (
                 <div key={label}>
                   <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-white/35">{label}</label>
-                  <input type="number" step="any"
+                  <input type="number" step="any" aria-label={label}
                     className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-[13px] text-white tabular-nums focus:border-brass focus:outline-none"
                     value={val} onChange={e => set(parseFloat(e.target.value) || 0)} />
                 </div>

@@ -16,6 +16,8 @@ import type { DataSource } from "../data/source";
 import { clearImported } from "../data/source";
 import { clearOverrides } from "../data/overrides";
 import { readRemoved, clearRemoved } from "../data/removed";
+import { clearVerdicts } from "../data/verdicts";
+import { clearBacktest } from "../lib/backtest";
 import { PROFILES, readProfileId, writeProfileId, type ProfileId } from "../data/profiles";
 import { RATES_TO_USD, setRateToUSD, resetRates } from "../lib/currency";
 import { longDate, shortDate, daysAgo, isoToday } from "../lib/format";
@@ -353,6 +355,8 @@ export function SettingsScreen({
               clearImported();
               clearOverrides();
               clearRemoved();
+              clearVerdicts();
+              clearBacktest();
               try {
                 localStorage.removeItem("helm:cash:v1");
               } catch {

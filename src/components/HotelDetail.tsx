@@ -18,6 +18,7 @@ import type { Business, HotelDay } from "../types";
 import { hotelMetricsFor, type HotelMetrics } from "../lib/hotelAnalytics";
 import { usd, usdCompact, pct, signedPct, shortDate, weekday } from "../lib/format";
 import { Card, Delta, Sparkline, cx } from "./ui";
+import { DataHealthBadge } from "./DataHealthBadge";
 import { AreaTrend } from "./charts";
 
 const RANGES = [
@@ -99,6 +100,13 @@ export function HotelDetail({
             {pct(m.todayOcc, 0)} occupancy · ${m.todayAdr.toFixed(0)} ADR
           </p>
         </div>
+
+        {/* Persistent trust badge — coverage / freshness + real-vs-modeled flag */}
+        <DataHealthBadge
+          series={business.series}
+          modeled={!business.dataReal}
+          modeledLabel="Modeled on this property's public profile"
+        />
 
         {/* KPI switcher */}
         <div className="flex gap-1.5 rounded-full bg-white/[0.05] p-1">

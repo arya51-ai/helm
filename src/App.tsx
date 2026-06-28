@@ -48,6 +48,8 @@ import { ActionSheet } from "./components/ActionSheet";
 import { cx } from "./components/ui";
 import { HelmMark } from "./components/Brand";
 import { readProfileId } from "./data/profiles";
+import { readVerdicts, setVerdict, clearVerdict, type Verdict } from "./data/verdicts";
+import { snapshotToday } from "./lib/backtest";
 
 type Tab = "brief" | "empire" | "stocks" | "businesses" | "hotels" | "settings";
 
@@ -72,6 +74,8 @@ export default function App() {
   const [askOpen, setAskOpen] = useState(false);
   const [actionInsight, setActionInsight] = useState<Insight | null>(null);
   const [openHotel, setOpenHotel] = useState<string | null>(null);
+  // Owner-as-judge: persisted verdicts on insights (confirm floats, not-useful sinks, dismiss hides).
+  const [verdicts, setVerdicts] = useState(() => readVerdicts());
 
   // Hotels are first-class businesses (type: "hotel"). The hospitality command center
   // only exists when at least one is present — so a Subway-and-smoke-shop owner never
@@ -138,11 +142,19 @@ export default function App() {
       { idleCash },
     );
     const unitInsights = buildUnitInsights(businesses, metricsBy);
-    const insights = [...opsInsights, ...hotelInsights, ...fuelInsights, ...unitInsights].sort(
-      (a, b) => b.priority - a.priority,
-    );
+    // Apply the owner's verdicts to the ranked feed: confirmed floats, not-useful sinks, dismissed
+    // drops to the bottom (the Brief filters it out; "See all" keeps it, recoverable via Undo).
+    const insights = [...opsInsights, ...hotelInsights, ...fuelInsights, ...unitInsights]
+      .map((i) => {
+        const v = verdicts[i.id]?.verdict;
+        if (!v) return i;
+        const priority =
+          v === "confirmed" ? i.priority + 15 : v === "not-useful" ? i.priority * 0.4 : -1;
+        return { ...i, priority };
+      })
+      .sort((a, b) => b.priority - a.priority);
     return { metricsBy, empire, insights };
-  }, [businesses, idleCash, netWorth, hotelInsights, fuelInsights]);
+  }, [businesses, idleCash, netWorth, hotelInsights, fuelInsights, verdicts]);
 
   // Same-brand peer groups (Dev's Subways) for the head-to-head compare overlay.
   const unitGroupsList = useMemo(() => unitGroups(businesses, metricsBy), [businesses, metricsBy]);
@@ -153,6 +165,15 @@ export default function App() {
     );
     if (g) setCompareGroup(g);
   }
+
+  // Record (or clear) the owner's verdict on an insight, then refresh local state so the feed
+  // re-ranks immediately. Pass null to undo. Persisted in localStorage (data/verdicts).
+  function judge(id: string, v: Verdict | null) {
+    if (v === null) clearVerdict(id);
+    else setVerdict(id, v);
+    setVerdicts(readVerdicts());
+  }
+  const verdictFor = (id: string) => verdicts[id]?.verdict;
 
   // Claude-written morning read for the Brief. Null when no key is configured
   // (the rule-engine insight cards stand on their own). Refetches when the data
@@ -186,11 +207,23 @@ export default function App() {
       setBusinesses(businesses);
       setDataSource(source);
     });
+    // Persona switches and "start fresh" route through here — re-read verdicts so the feed
+    // reflects the now-active persona's namespaced judgments (each persona is its own world).
+    setVerdicts(readVerdicts());
   }
 
   // Roll data forward automatically at local midnight (and on focus after a date change),
   // so "today" advances without reopening the app.
   useDailyRefresh(reload);
+
+  // Backtest receipts: snapshot the day's top insights once per local day, so "Helm flagged this
+  // N days ago — here's where it stands now" can render once a week or so of history accrues. The
+  // snapshot is idempotent per day (lib/backtest), so re-running on data changes is a safe no-op.
+  useEffect(() => {
+    if (businesses.length === 0) return;
+    snapshotToday(insights);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empire.asOf, businesses.length]);
 
   // If the active persona has no hotels (or the last one was removed), never strand the
   // user on a now-hidden hospitality tab.
@@ -276,6 +309,8 @@ export default function App() {
               onOpenHotels={() => (soloMotel ? setOpenHotel(soloMotel.id) : setTab("hotels"))}
               onOpenHotel={(id) => setOpenHotel(id)}
               onOpenCompare={openCompareFor}
+              onVerdict={judge}
+              verdictFor={verdictFor}
             />
           )}
           {tab === "empire" && (
@@ -463,6 +498,8 @@ export default function App() {
               setAllInsights(false);
               openCompareFor(i);
             }}
+            onVerdict={judge}
+            verdictFor={verdictFor}
           />
         )}
         {actionInsight && (
@@ -496,6 +533,8 @@ function AllInsights({
   onOpenBusiness,
   onDraft,
   onOpenCompare,
+  onVerdict,
+  verdictFor,
 }: {
   insights: ReturnType<typeof buildInsights>;
   onClose: () => void;
@@ -503,6 +542,8 @@ function AllInsights({
   onOpenBusiness: (id: string) => void;
   onDraft: (insight: Insight) => void;
   onOpenCompare: (insight: Insight) => void;
+  onVerdict?: (id: string, v: Verdict | null) => void;
+  verdictFor?: (id: string) => Verdict | undefined;
 }) {
   return (
     <div className="fixed inset-0 z-40 mx-auto flex max-w-[440px] flex-col bg-[#0a263e]">
@@ -520,6 +561,8 @@ function AllInsights({
             onAction={onToast}
             onOpen={i.businessId ? () => onOpenBusiness(i.businessId!) : undefined}
             onDraft={i.action ? () => (i.id.startsWith("unit-compare") ? onOpenCompare(i) : onDraft(i)) : undefined}
+            verdict={verdictFor?.(i.id)}
+            onVerdict={onVerdict ? (v) => onVerdict(i.id, v) : undefined}
           />
         ))}
       </div>
