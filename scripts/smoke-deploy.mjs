@@ -16,12 +16,22 @@
 //                            (cost gate judged nothing material — STILL live). { available:false }/{error} ⇒ off/broken.
 //
 // Uses global fetch (Node 18+). No deps.
+//
+// COST: the full run exercises /ask (Sonnet) AND /brief (Opus) against the deploy, so on a
+// keyed host it SPENDS a few cents. For a zero-cost "did the deploy come up?" check, pass
+// `--status-only` (or SMOKE_STATUS_ONLY=1) — it probes ONLY the free /status route and never
+// bills the key.  Usage:  node scripts/smoke-deploy.mjs [--status-only] <base-url>
 
-const base = (process.argv[2] || process.env.BASE_URL || "").trim().replace(/\/+$/, "");
+const args = process.argv.slice(2);
+const statusOnly =
+  args.includes("--status-only") || /^(1|true|yes)$/i.test(process.env.SMOKE_STATUS_ONLY || "");
+// The base url is the first non-flag arg (or BASE_URL); flags may appear anywhere.
+const base = (args.find((a) => !a.startsWith("-")) || process.env.BASE_URL || "").trim().replace(/\/+$/, "");
 
 if (!base) {
-  console.error("FAIL  no base url. Usage: node scripts/smoke-deploy.mjs https://your-app.vercel.app");
+  console.error("FAIL  no base url. Usage: node scripts/smoke-deploy.mjs [--status-only] https://your-app.vercel.app");
   console.error("                  (or: BASE_URL=https://your-app.vercel.app npm run smoke)");
+  console.error("                  --status-only = free probe of /status only (no billed /ask or /brief)");
   process.exit(1);
 }
 if (!/^https?:\/\//.test(base)) {
@@ -195,16 +205,28 @@ async function checkBrief() {
   }
 }
 
-console.log(`\nHelm live-brain smoke test → ${base}\n`);
+console.log(`\nHelm ${statusOnly ? "status-only" : "live-brain"} smoke test → ${base}\n`);
 await checkStatus();
-await checkAsk();
-await checkBrief();
+if (statusOnly) {
+  // /ask + /brief are billed (Sonnet + Opus). Skip them for a genuinely free deploy-health probe.
+  console.log("(--status-only: skipped the billed /ask + /brief checks — this run spent $0)");
+} else {
+  await checkAsk();
+  await checkBrief();
+}
 
 console.log("");
 if (failed) {
-  console.error("✗ SMOKE FAILED — the live Claude brain is NOT fully working on this deploy.");
+  console.error(
+    statusOnly
+      ? "✗ STATUS FAILED — /api/agent/status did not report the brain available on this deploy."
+      : "✗ SMOKE FAILED — the live Claude brain is NOT fully working on this deploy.",
+  );
   console.error("  Likely causes: ANTHROPIC_API_KEY not set on the host · /api/agent functions not deployed · spend cap hit.");
   process.exit(1);
+} else if (statusOnly) {
+  console.log("✓ STATUS OK — /api/agent/status reports the brain available (no billed calls made, $0 spent).");
+  process.exit(0);
 } else {
   console.log("✓ SMOKE PASSED — status available, ask streams SSE, brief returns text. The brain is live.");
   process.exit(0);

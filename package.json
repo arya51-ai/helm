@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "server": "node server/index.mjs",
     "smoke": "node scripts/smoke-deploy.mjs",
+    "smoke:status": "node scripts/smoke-deploy.mjs --status-only",
     "eval": "node evals/run.mjs"
   },
   "dependencies": {
